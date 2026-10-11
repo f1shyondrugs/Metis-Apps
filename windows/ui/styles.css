@@ -1,0 +1,20 @@
+@font-face{font-family:system;src:local("Segoe UI")}
+:root{color-scheme:dark;font-family:system,"Segoe UI",sans-serif;background:#111111;color:#f0f0ee}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:40px 24px}
+main{width:100%;max-width:440px}
+.logo{object-fit:contain;margin-bottom:20px}
+.brand{font-size:14px;letter-spacing:.06em;color:#c6c6c0;margin:0 0 26px}
+h1{font-family:Georgia,serif;font-size:36px;font-weight:400;letter-spacing:-.025em;line-height:1.15;margin:0 0 16px}
+p{font-size:15px;line-height:1.65;color:#c6c6c0;margin:0 0 12px}
+#server-label{font-size:13px;overflow-wrap:anywhere;color:#aaa9a3;margin-bottom:28px}
+label{display:block;font-size:14px;margin-bottom:10px}
+input{width:100%;font:inherit;background:#1b1b1a;border:1px solid #55554e;color:#f0f0ee;border-radius:6px;padding:14px}
+button{font:inherit;font-weight:600;background:#f0f0ee;color:#111111;border:1px solid #f0f0ee;padding:12px 18px;border-radius:6px;cursor:pointer}
+button.secondary{background:transparent;color:#f0f0ee;border-color:#55554e}
+button:disabled{opacity:.55;cursor:wait}
+button:focus-visible,input:focus-visible{outline:2px solid #d6ba84;outline-offset:4px}
+#validation{color:#f1ad9a;font-size:14px;min-height:24px;margin:8px 0 14px}
+#actions{display:flex;flex-wrap:wrap;gap:12px}
+footer{font-size:12px;color:#aaa9a3;border-top:1px solid #33332f;padding-top:20px;margin-top:40px}
+[hidden]{display:none!important}

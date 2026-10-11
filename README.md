@@ -1,18 +1,26 @@
-# Metis Mobile
+# Metis Apps
 
-Metis Mobile is a set of native mobile clients for connecting to a Metis server.
+Installable Metis AI applications, separated by platform:
 
-## Apps
+| Directory | Application |
+| --- | --- |
+| [android/](android/) | Existing native Android client, imported unchanged from the Android-App branch |
+| [windows/](windows/) | Electron desktop prototype rendering the Metis website, with a Windows installer |
 
-- **Android:** Native Android client. Development is on the [Android-App branch](https://github.com/f1shyondrugs/metis-mobile-app/tree/Android-App). The current version supports first-run server setup, sign in, chat list, new chats, conversation history, and streaming assistant replies.
-- **iPhone:** Native iOS app planned. The iOS client is not included yet.
+Each directory owns its dependencies, build configuration, tests and documentation. There is no shared root build or dependency installation. Android and Windows releases are independent.
 
-On first launch, enter the URL of the Metis server you want to use. Sign in with an account on that server. The apps require a network connection to the configured server.
+## Windows
 
-## Build the Android app
+Download the installer from [desktop releases](https://github.com/f1shyondrugs/Metis-Apps/releases). The app starts at https://ai.f1shy312.com; use **Metis → Serveradresse ändern** to connect to your own server.
 
-The Android source and build instructions are on the [Android-App branch](https://github.com/f1shyondrugs/metis-mobile-app/tree/Android-App).
+The installer registers **Metis AI** in Windows Installed Apps and creates Start menu and desktop shortcuts. Its app ID is separate from Metis AI Remote Client. This application renders the website; remote device control continues to use the separate Remote Client.
 
-## Status
+See [Windows build and test instructions](windows/README.md).
 
-Android development is underway. The iPhone app is planned for this repository.
+## Android
+
+The existing Android source is in [android/](android/). See [Android build instructions](android/README.md). The [Android-App branch](https://github.com/f1shyondrugs/Metis-Apps/tree/Android-App) is retained.
+
+## iPhone
+
+A native iOS client is planned and is not included yet.

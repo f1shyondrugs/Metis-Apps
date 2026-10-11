@@ -1,0 +1,62 @@
+{
+  "name": "metis-ai-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Metis AI website as an installable Windows desktop application",
+  "main": "main.cjs",
+  "author": "f1shyondrugs",
+  "scripts": {
+    "start": "electron .",
+    "check": "node scripts/check.cjs",
+    "test": "node --test tests/policy.test.cjs",
+    "test:e2e": "electron tests/smoke.cjs",
+    "build:win": "electron-builder --win nsis --x64 --publish never",
+    "build:dir": "electron-builder --win --x64 --dir --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "ai.metis.desktop",
+    "productName": "Metis AI",
+    "copyright": "Copyright © 2026 Metis AI",
+    "asar": true,
+    "files": [
+      "main.cjs",
+      "policy.cjs",
+      "preload.cjs",
+      "ui/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "executableName": "Metis AI",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Metis AI",
+      "uninstallDisplayName": "Metis AI",
+      "artifactName": "Metis-AI-Setup-${version}-${arch}.${ext}",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

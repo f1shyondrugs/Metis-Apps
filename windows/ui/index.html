@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'">
+<title>Metis AI</title>
+<link rel="stylesheet" href="styles.css">
+<script defer src="renderer.js"></script>
+</head>
+<body>
+<main>
+  <img class="logo" src="../assets/icon.png" width="56" height="56" alt="">
+  <p class="brand">Metis AI</p>
+  <h1 id="heading">Metis wird geöffnet.</h1>
+  <p id="description" aria-live="polite">Verbindung zum Server wird hergestellt.</p>
+  <p id="server-label"></p>
+  <form id="form" hidden>
+    <label for="server">Serveradresse</label>
+    <input id="server" name="server" type="url" required autocomplete="url" spellcheck="false" placeholder="https://ai.f1shy312.com">
+    <p id="validation" role="alert"></p>
+    <button type="submit">Metis öffnen</button>
+  </form>
+  <div id="actions" hidden>
+    <button id="retry">Erneut versuchen</button>
+    <button id="settings" class="secondary">Serveradresse ändern</button>
+  </div>
+  <footer>Dein Metis. In einem eigenen Fenster.</footer>
+</main>
+</body>
+</html>

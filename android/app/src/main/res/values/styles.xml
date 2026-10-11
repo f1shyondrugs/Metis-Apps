@@ -1,0 +1,26 @@
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#ededed</item>
+        <item name="android:textColorPrimary">#ededed</item>
+        <item name="android:textColorSecondary">#a3a3a3</item>
+        <item name="android:colorBackground">#070707</item>
+        <item name="android:statusBarColor">#070707</item>
+        <item name="android:navigationBarColor">#070707</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#070707</item>
+        <item name="android:alertDialogTheme">@style/MetisDialog</item>
+    </style>
+    <style name="MetisDialog" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">#fafafa</item>
+        <item name="android:textColorPrimary">#fafafa</item>
+        <item name="android:textColorSecondary">#a3a3a3</item>
+        <item name="android:colorBackground">#0e0e0e</item>
+        <item name="android:colorBackgroundFloating">#0e0e0e</item>
+        <item name="android:windowBackground">@drawable/dialog_background</item>
+        <item name="android:windowMinWidthMajor">90%</item>
+        <item name="android:windowMinWidthMinor">90%</item>
+    </style>
+</resources>
