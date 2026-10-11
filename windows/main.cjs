@@ -67,8 +67,8 @@ async function createDesktop() {
       if (permission === 'clipboard-sanitized-write') return callback(true);
       const { response } = await dialog.showMessageBox(win, {
         type: 'question', title: 'Metis AI',
-        message: permission === 'media' ? 'Mikrofon oder Kamera erlauben?' : 'Benachrichtigungen erlauben?',
-        detail: server, buttons: ['Nicht erlauben', 'Erlauben'], defaultId: 0, cancelId: 0
+        message: permission === 'media' ? 'Allow microphone or camera access?' : 'Allow notifications?',
+        detail: server, buttons: ['Deny', 'Allow'], defaultId: 0, cancelId: 0
       });
       const accepted = response === 1 && generation === currentGeneration;
       if (accepted) permissionGrants.add(permissionKey(permission, details));
@@ -94,22 +94,22 @@ async function createDesktop() {
       remote.setVisible(false); update('error', message);
     };
     contents.on('did-fail-load', (_event, code, _description, _url, mainFrame) => {
-      if (mainFrame && code !== -3) failure('Der Server ist nicht erreichbar. Prüfe die Verbindung oder ändere die Serveradresse.');
+      if (mainFrame && code !== -3) failure('The server is unreachable. Check your connection or change the server address.');
     });
-    contents.on('render-process-gone', () => failure('Die Seite wurde beendet. Du kannst sie erneut laden.'));
+    contents.on('render-process-gone', () => failure('The page stopped working. You can reload it.'));
     let timer = setTimeout(() => {
       if (generation === currentGeneration && state.mode === 'loading') {
-        contents.stop(); failure('Der Server antwortet nicht. Versuche es erneut oder ändere die Serveradresse.');
+        contents.stop(); failure('The server is not responding. Try again or change the server address.');
       }
     }, 30000);
     contents.once('destroyed', () => clearTimeout(timer));
     try { await contents.loadURL(server); } catch {
-      failure('Der Server konnte nicht geladen werden. Prüfe die Verbindung oder ändere die Serveradresse.');
+      failure('The server could not be loaded. Check your connection or change the server address.');
     } finally { clearTimeout(timer); }
   }
   function assertLocal(event) {
     if (event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame ||
-        event.senderFrame.url !== shellUrl) throw new Error('Unzulässiger Zugriff.');
+        event.senderFrame.url !== shellUrl) throw new Error('Access denied.');
   }
   const handlers = {
     'desktop:state': (event) => { assertLocal(event); return state; },
@@ -133,20 +133,20 @@ async function createDesktop() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { label: 'Metis', submenu: [
-      { label: 'Startseite', accelerator: 'CmdOrCtrl+Home', click: () => { void load(); } },
-      { label: 'Serveradresse ändern…', accelerator: 'CmdOrCtrl+,', click: settings },
-      { label: 'Im Browser öffnen', click: () => openExternal(server) },
+      { label: 'Home', accelerator: 'CmdOrCtrl+Home', click: () => { void load(); } },
+      { label: 'Change server…', accelerator: 'CmdOrCtrl+,', click: settings },
+      { label: 'Open in browser', click: () => openExternal(server) },
       { type: 'separator' },
-      { label: 'Über Metis AI', click: () => dialog.showMessageBox(win, { title: 'Metis AI', message: 'Metis AI ' + app.getVersion(), detail: 'Desktop-Prototyp · ' + server }) },
-      { role: 'quit', label: 'Beenden' }
+      { label: 'About Metis AI', click: () => dialog.showMessageBox(win, { title: 'Metis AI', message: 'Metis AI ' + app.getVersion(), detail: 'Desktop prototype · ' + server }) },
+      { role: 'quit', label: 'Quit' }
     ] },
-    { role: 'editMenu', label: 'Bearbeiten' },
-    { label: 'Ansicht', submenu: [
-      { label: 'Neu laden', accelerator: 'CmdOrCtrl+R', click: () => { if (view && state.mode === 'ready') view.webContents.reload(); else void load(); } },
-      { role: 'togglefullscreen', label: 'Vollbild' },
-      { role: 'resetZoom', label: 'Originalgröße' },
-      { role: 'zoomIn', label: 'Vergrößern' },
-      { role: 'zoomOut', label: 'Verkleinern' }
+    { role: 'editMenu', label: 'Edit' },
+    { label: 'View', submenu: [
+      { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: () => { if (view && state.mode === 'ready') view.webContents.reload(); else void load(); } },
+      { role: 'togglefullscreen', label: 'Full screen' },
+      { role: 'resetZoom', label: 'Actual size' },
+      { role: 'zoomIn', label: 'Zoom in' },
+      { role: 'zoomOut', label: 'Zoom out' }
     ] }
   ]));
   win.on('resize', resize);
@@ -159,6 +159,7 @@ async function createDesktop() {
   return { win, getView: () => view, getState: () => state, settings, load, initialLoad };
 }
 function bootstrap() {
+  app.commandLine.appendSwitch('lang', 'en-US');
   app.setName('Metis AI');
   app.setAppUserModelId(APP_ID);
   if (!app.requestSingleInstanceLock()) return app.quit();
@@ -167,7 +168,7 @@ function bootstrap() {
     if (desktop && !desktop.win.isDestroyed()) { if (desktop.win.isMinimized()) desktop.win.restore(); desktop.win.show(); desktop.win.focus(); }
   });
   const open = async () => { desktop = await createDesktop(); };
-  app.whenReady().then(open).catch((error) => { dialog.showErrorBox('Metis AI konnte nicht starten', error.message); app.quit(); });
+  app.whenReady().then(open).catch((error) => { dialog.showErrorBox('Metis AI could not start', error.message); app.quit(); });
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) void open(); });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 }

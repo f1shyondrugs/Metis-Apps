@@ -59,7 +59,7 @@ async function main() {
   fixture.close(); await once(fixture, 'close');
   await desktop.load();
   assert.equal(desktop.getState().mode, 'error');
-  assert.match(desktop.getState().message, /Server/);
+  assert.match(desktop.getState().message, /server/i);
   console.log('OFFLINE_RECOVERY_OK');
   fs.mkdirSync(path.join(__dirname, '..', 'test-results'), { recursive: true });
   const output = path.join(__dirname, '..', 'test-results');

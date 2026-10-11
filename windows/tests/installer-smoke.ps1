@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+$expectedVersion = (Get-Content (Join-Path $PSScriptRoot '..\package.json') -Raw | ConvertFrom-Json).version
 if (-not $env:RUNNER_TEMP) { throw 'Installer smoke test is restricted to an isolated CI runner.' }
 $installer = Get-ChildItem (Join-Path $PSScriptRoot '..\dist') -Filter 'Metis-AI-Setup-*-x64.exe' | Select-Object -First 1
 if (-not $installer) { throw 'Installer missing.' }
@@ -8,7 +9,7 @@ $exe = Join-Path $installDir 'Metis AI.exe'
 if (-not (Test-Path $exe)) { throw 'Installed executable missing.' }
 $entries = @(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq 'Metis AI' })
 if ($entries.Count -ne 1) { throw 'Windows Installed Apps registration missing or duplicated.' }
-if ($entries[0].DisplayVersion -ne '0.1.0') { throw 'Installed version mismatch.' }
+if ($entries[0].DisplayVersion -ne $expectedVersion) { throw 'Installed version mismatch.' }
 $uninstallKey = $entries[0].PSPath
 $shortcutPaths = @(
   (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Metis AI.lnk'),

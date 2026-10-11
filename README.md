@@ -11,7 +11,7 @@ Each directory owns its dependencies, build configuration, tests and documentati
 
 ## Windows
 
-Download the installer from [desktop releases](https://github.com/f1shyondrugs/Metis-Apps/releases). The app starts at https://ai.f1shy312.com; use **Metis → Serveradresse ändern** to connect to your own server.
+Download the installer from [desktop releases](https://github.com/f1shyondrugs/Metis-Apps/releases). The app starts at https://ai.f1shy312.com; use **Metis → Change server** to connect to your own server.
 
 The installer registers **Metis AI** in Windows Installed Apps and creates Start menu and desktop shortcuts. Its app ID is separate from Metis AI Remote Client. This application renders the website; remote device control continues to use the separate Remote Client.
 

@@ -1,6 +1,6 @@
 {
   "name": "metis-ai-desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Metis AI website as an installable Windows desktop application",
   "main": "main.cjs",
@@ -56,7 +56,12 @@
       "shortcutName": "Metis AI",
       "uninstallDisplayName": "Metis AI",
       "artifactName": "Metis-AI-Setup-${version}-${arch}.${ext}",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "installerLanguages": [
+        "en_US"
+      ],
+      "language": "1033",
+      "multiLanguageInstaller": false
     }
   }
 }

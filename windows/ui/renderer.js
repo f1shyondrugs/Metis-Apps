@@ -5,8 +5,8 @@ function render(state) {
   byId('actions').hidden = !['loading', 'error'].includes(state.mode);
   byId('retry').hidden = state.mode === 'loading';
   byId('server-label').textContent = state.server;
-  byId('heading').textContent = state.mode === 'settings' ? 'Mit Metis verbinden.' : state.mode === 'error' ? 'Verbindung unterbrochen.' : 'Metis wird geöffnet.';
-  byId('description').textContent = state.mode === 'settings' ? 'Nutze den öffentlichen Metis-Server oder gib die Adresse deiner eigenen Installation ein.' : state.mode === 'error' ? state.message : 'Verbindung zum Server wird hergestellt.';
+  byId('heading').textContent = state.mode === 'settings' ? 'Connect to Metis.' : state.mode === 'error' ? 'Connection interrupted.' : 'Opening Metis.';
+  byId('description').textContent = state.mode === 'settings' ? 'Use the Metis server or enter the address of your own installation.' : state.mode === 'error' ? state.message : 'Connecting to the server.';
   if (state.mode === 'settings') {
     byId('server').value = state.server;
     byId('validation').textContent = '';
@@ -24,6 +24,6 @@ byId('form').addEventListener('submit', async (event) => {
   try {
     const result = await api.connect(byId('server').value);
     if (!result.ok) byId('validation').textContent = result.error;
-  } catch { byId('validation').textContent = 'Die Adresse konnte nicht gespeichert werden. Versuche es erneut.'; }
+  } catch { byId('validation').textContent = 'The address could not be saved. Try again.'; }
   finally { button.disabled = false; }
 });
