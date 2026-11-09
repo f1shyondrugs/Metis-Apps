@@ -1,5 +1,6 @@
 // Real Electron + device protocol, isolated files and a local fixture only.
 const { app, safeStorage } = require('electron');
+app.disableHardwareAcceleration();
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');

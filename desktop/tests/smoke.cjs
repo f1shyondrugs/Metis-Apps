@@ -1,5 +1,6 @@
 // Run inside Electron against an isolated local fixture; never uses a real account.
 const { app } = require('electron');
+app.disableHardwareAcceleration();
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
