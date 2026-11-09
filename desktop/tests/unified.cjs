@@ -99,6 +99,23 @@ async function main() {
   await api.showDesktop();
   assert.equal(desktop.win.isVisible(), true);
   console.log('BACKGROUND_CONNECTION_SURVIVES_RELOAD_AND_CLOSE_OK');
+  if (process.platform === 'darwin') {
+    const { utilityProcess } = require('electron');
+    const { startDeviceHost } = require('../src/device/runtime.cjs');
+    let nativeOnline = false;
+    const native = startDeviceHost({ utilityProcess,
+      config: { server, clientId: 'fixture-device', credential: 'fixture-only-credential', permissionMode }, configPath: configFile,
+      capabilities: { desktopAvailable: true, nativeNotifications: false },
+      onEvent: event => { if (event.type === 'connection' && event.status === 'online') nativeOnline = true; }, showNotification: () => false });
+    try {
+      await waitFor(() => nativeOnline);
+      socket.send(JSON.stringify({ type: 'request', requestId: 'native-status', action: 'computer_use', params: { operation: 'status' } }));
+      await waitFor(() => responses.has('native-status'));
+      assert.equal(responses.get('native-status').ok, true);
+      assert.equal(typeof responses.get('native-status').result.available, 'boolean');
+      console.log('MAC_NATIVE_DEVICE_PROCESS_OK');
+    } finally { native.stop(); }
+  }
   const output = path.join(__dirname, '../test-results');
   fs.mkdirSync(output, { recursive: true });
   fs.writeFileSync(path.join(output, 'unified-fixture.png'), (await remote.capturePage()).toPNG());

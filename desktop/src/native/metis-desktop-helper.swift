@@ -40,7 +40,7 @@ func handle(_ p: [String: Any]) throws -> [String: Any] {
     let locked = session == nil || (session?["CGSSessionScreenIsLocked"] as? Bool ?? false)
     let available = accessibility && capture && !locked && !windows().isEmpty
     let reason = locked ? "Desktop is locked or unavailable" :
-        !accessibility || !capture ? "Enable Screen Recording and Accessibility for Metis AI Remote Client in System Settings, then restart the app." : ""
+        !accessibility || !capture ? "Enable Screen Recording and Accessibility for Metis in System Settings, then restart the app." : ""
     if operation == "status" || operation == "request_permissions" {
         return ["available": available, "accessibility": accessibility, "screenRecording": capture, "reason": reason, "backend": "app"]
     }
