@@ -52,8 +52,15 @@ async function main() {
   });
   const configFile = path.join(directory, 'config.json');
   const { createCredentialStore } = require('../credential-store.cjs');
+  let permissionMode = 'user';
+  if (process.platform === 'win32') {
+    const { execFileSync } = require('node:child_process');
+    const elevated = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      '$identity = [Security.Principal.WindowsIdentity]::GetCurrent(); $principal = [Security.Principal.WindowsPrincipal]::new($identity); $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'], { encoding: 'utf8', windowsHide: true }).trim();
+    permissionMode = elevated === 'True' ? 'admin' : 'user';
+  }
   createCredentialStore({ file: configFile, safeStorage }).save({
-    server, clientId: 'fixture-device', credential: 'fixture-only-credential', permissionMode: 'user'
+    server, clientId: 'fixture-device', credential: 'fixture-only-credential', permissionMode
   });
   const original = fs.readFileSync(configFile);
   fs.writeFileSync(path.join(directory, 'server.json'), JSON.stringify({ url: server }));
