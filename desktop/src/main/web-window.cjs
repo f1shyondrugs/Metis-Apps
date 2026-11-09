@@ -2,20 +2,21 @@ const { app, BrowserWindow, WebContentsView, Menu, ipcMain, shell, dialog } = re
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { DEFAULT_SERVER, normalizeServer, sameOrigin, externalUrl } = require('./policy.cjs');
+const ROOT = path.join(__dirname, '../..');
+const { DEFAULT_SERVER, normalizeServer, sameOrigin, externalUrl } = require(path.join(ROOT, 'policy.cjs'));
 const APP_ID = 'ai.metis.desktop';
-const shellPath = path.join(__dirname, 'ui', 'index.html');
+const shellPath = path.join(ROOT, 'ui', 'index.html');
 const shellUrl = pathToFileURL(shellPath).href;
 
-async function createDesktop() {
+async function createDesktop({ onDevices = () => {}, shouldHide = () => false, initialServer } = {}) {
   const configPath = path.join(app.getPath('userData'), 'server.json');
-  let server = DEFAULT_SERVER;
+  let server = initialServer ? normalizeServer(initialServer) : DEFAULT_SERVER;
   try { server = normalizeServer(JSON.parse(fs.readFileSync(configPath, 'utf8')).url); } catch {}
   const win = new BrowserWindow({
     width: 1360, height: 900, minWidth: 600, minHeight: 480,
-    title: 'Metis AI', icon: path.join(__dirname, 'assets', 'icon.png'),
+    title: 'Metis', icon: path.join(ROOT, 'assets', 'icon.png'),
     backgroundColor: '#111111',
-    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false }
+    webPreferences: { preload: path.join(__dirname, 'web-preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false }
   });
   let view;
   let generation = 0;
@@ -66,7 +67,7 @@ async function createDesktop() {
           !sameOrigin(details.requestingUrl || wc.getURL(), server) || !allowed.includes(permission)) return callback(false);
       if (permission === 'clipboard-sanitized-write') return callback(true);
       const { response } = await dialog.showMessageBox(win, {
-        type: 'question', title: 'Metis AI',
+        type: 'question', title: 'Metis',
         message: permission === 'media' ? 'Allow microphone or camera access?' : 'Allow notifications?',
         detail: server, buttons: ['Deny', 'Allow'], defaultId: 0, cancelId: 0
       });
@@ -84,7 +85,7 @@ async function createDesktop() {
     };
     contents.on('will-navigate', navigation);
     contents.on('will-redirect', navigation);
-    contents.on('page-title-updated', (event) => { event.preventDefault(); win.setTitle('Metis AI'); });
+    contents.on('page-title-updated', (event) => { event.preventDefault(); win.setTitle('Metis'); });
     contents.on('did-finish-load', () => {
       if (generation !== currentGeneration) return;
       remote.setVisible(true); update('ready'); contents.focus();
@@ -134,10 +135,11 @@ async function createDesktop() {
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { label: 'Metis', submenu: [
       { label: 'Home', accelerator: 'CmdOrCtrl+Home', click: () => { void load(); } },
+      { label: 'Device settings…', accelerator: 'CmdOrCtrl+Shift+D', click: onDevices },
       { label: 'Change server…', accelerator: 'CmdOrCtrl+,', click: settings },
       { label: 'Open in browser', click: () => openExternal(server) },
       { type: 'separator' },
-      { label: 'About Metis AI', click: () => dialog.showMessageBox(win, { title: 'Metis AI', message: 'Metis AI ' + app.getVersion(), detail: 'Desktop prototype · ' + server }) },
+      { label: 'About Metis', click: () => dialog.showMessageBox(win, { title: 'Metis', message: 'Metis ' + app.getVersion(), detail: 'Desktop app · ' + server }) },
       { role: 'quit', label: 'Quit' }
     ] },
     { role: 'editMenu', label: 'Edit' },
@@ -150,6 +152,7 @@ async function createDesktop() {
     ] }
   ]));
   win.on('resize', resize);
+  win.on('close', event => { if (shouldHide()) { event.preventDefault(); win.hide(); } });
   win.on('closed', () => {
     disposeView();
     for (const channel of Object.keys(handlers)) ipcMain.removeHandler(channel);
@@ -160,7 +163,7 @@ async function createDesktop() {
 }
 function bootstrap() {
   app.commandLine.appendSwitch('lang', 'en-US');
-  app.setName('Metis AI');
+  app.setName('Metis');
   app.setAppUserModelId(APP_ID);
   if (!app.requestSingleInstanceLock()) return app.quit();
   let desktop;
@@ -168,7 +171,7 @@ function bootstrap() {
     if (desktop && !desktop.win.isDestroyed()) { if (desktop.win.isMinimized()) desktop.win.restore(); desktop.win.show(); desktop.win.focus(); }
   });
   const open = async () => { desktop = await createDesktop(); };
-  app.whenReady().then(open).catch((error) => { dialog.showErrorBox('Metis AI could not start', error.message); app.quit(); });
+  app.whenReady().then(open).catch((error) => { dialog.showErrorBox('Metis could not start', error.message); app.quit(); });
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) void open(); });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 }

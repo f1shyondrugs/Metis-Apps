@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'">
+  <title>Metis — Device settings</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./appearance.cjs"></script>
+  <script src="./cancel-shortcut.cjs"></script>
+  <script src="./command-history.cjs"></script>
+</head>
+<body>
+  <header class="topbar">
+    <button id="open-activity" class="brand" type="button" aria-label="Open activity"><img src="./assets/icon.png" alt="" width="32" height="32"><span><strong>Metis</strong><span>Device settings</span></span></button>
+    <nav class="topbar-right" aria-label="Device navigation">
+      <span class="connection-status"><span id="connection-dot" class="status-dot" aria-hidden="true"></span><span id="connection-label">Offline</span></span>
+      <button id="open-server" class="text-button" type="button">Open Metis</button>
+      <button id="open-settings" class="text-button settings-nav" type="button" aria-controls="settings-view">
+        <!-- Lucide Settings, ISC license: assets/lucide-LICENSE.txt -->
+        <svg class="lucide lucide-settings" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>Settings
+      </button>
+    </nav>
+  </header>
+  <div id="permission-banner" class="permission-banner" role="alert" hidden>
+    <div><strong id="permission-banner-title">Desktop permissions are not enabled</strong><p id="permission-banner-detail">Checking Screen Recording and Accessibility…</p></div>
+    <button id="banner-grant" class="permission-grant" type="button" hidden>Grant</button>
+  </div>
+  <main>
+    <div id="hub-error" class="error-banner global-error" role="alert" hidden></div>
+    <section id="pair-view" class="pair-view">
+      <div class="pair-panel">
+        <p class="eyebrow">THIS DEVICE</p><h1>Connect this device</h1>
+        <p class="subtle">Open Settings → Devices → Add client in Metis and enter the pairing code here.</p>
+        <form id="pair-form">
+          <label for="server">Metis server URL</label>
+          <input id="server" type="url" placeholder="https://your-metis-server.example" required autocomplete="url">
+          <label for="token">Pairing code</label>
+          <input id="token" type="text" placeholder="Paste the code from Metis" required autocomplete="off" spellcheck="false">
+          <p id="pair-note" class="field-note">The code expires after 15 minutes.</p>
+          <button id="pair-button" class="primary-button" type="submit">Connect device</button>
+        </form>
+        <p id="pair-error" class="error-text" role="alert" hidden></p>
+      </div>
+    </section>
+    <section id="hub-view" class="hub-view" hidden>
+      <div class="page-heading">
+        <div><h1 id="device-name" tabindex="-1">Your device</h1><p id="sync-label" class="subtle">Loading activity…</p></div>
+        <button id="refresh" class="text-button" type="button">Refresh</button>
+      </div>
+      <div class="device-summary status-summary"><span id="device-meta">Device</span><span id="device-seen"></span></div>
+      <section class="activity-pane" aria-label="This device's activity">
+        <div class="section-heading"><div><h2>Recent commands</h2><p class="subtle">Activity on this device only</p></div><button id="export" class="text-button" type="button">Export logs</button></div>
+        <div class="filters"><input id="search" type="search" placeholder="Search commands" aria-label="Search commands"><select id="status-filter" aria-label="Filter by status"><option value="all">All statuses</option><option value="running">Running</option><option value="completed">Completed</option><option value="error">Failed</option><option value="unknown">Unclear outcome</option><option value="denied">Denied</option></select></div>
+        <div id="commands-loading" class="empty" role="status">Loading recent commands…</div>
+        <div id="commands-list" class="commands-list"></div>
+        <nav id="commands-pagination" class="pagination" aria-label="Command history pages" hidden>
+          <span id="commands-range" class="subtle"></span>
+          <div class="pagination-controls">
+            <button id="commands-previous" class="text-button" type="button" aria-controls="commands-list">Previous</button>
+            <span id="commands-page" class="subtle" role="status" aria-live="polite" aria-atomic="true"></span>
+            <button id="commands-next" class="text-button" type="button" aria-controls="commands-list">Next</button>
+          </div>
+        </nav>
+        <div id="command-detail" class="command-detail" hidden></div>
+      </section>
+    </section>
+    <section id="settings-view" class="hub-view settings-view" aria-labelledby="settings-title" hidden>
+      <div class="page-heading"><div><h1 id="settings-title" tabindex="-1">Settings</h1><p class="subtle">Preferences for this device</p></div><button id="close-settings" class="text-button" type="button">Back to activity</button></div>
+      <section class="settings-section" aria-labelledby="general-title">
+        <h2 id="general-title">General</h2>
+        <label class="setting-row" for="autostart"><span><strong>Start at login</strong><span class="subtle">Start Metis when you sign in.</span></span><input id="autostart" type="checkbox"></label>
+        <div class="setting-row"><div><strong>App updates</strong><p id="update-label" class="subtle" role="status" aria-live="polite"></p></div><button id="check-updates" class="text-button" type="button">Check for updates</button></div>
+      </section>
+      <section class="settings-section" aria-labelledby="computer-use-title">
+        <h2 id="computer-use-title">Computer Use</h2><p class="subtle">Access is managed in Metis → Settings → Devices.</p>
+        <div id="desktop-permission-notice" class="device-summary" role="status" hidden><span id="desktop-permission-reason"></span><button id="desktop-access-permissions" class="text-button" type="button" hidden>Open macOS permissions</button></div>
+        <div class="device-summary capture-setting"><div class="capture-copy">
+          <label class="menu-item check" for="hide-overlay-from-capture"><input id="hide-overlay-from-capture" type="checkbox" checked aria-describedby="capture-help capture-status">Hide overlay from streams and recordings</label>
+          <p id="capture-help" class="subtle">The notice, border and cursor stay visible locally during Computer Use. To include them in a stream, share your entire screen.</p>
+          <p id="capture-status" class="subtle" role="status">Hidden from screen captures</p><p id="capture-error" class="error-text" role="alert" hidden></p>
+        </div></div>
+        <div class="device-summary shortcut-setting">
+          <div class="shortcut-copy"><label for="cancel-shortcut">Cancel Computer Use</label><p id="shortcut-help" class="subtle">Choose the key or combination that stops desktop control.</p></div>
+          <div class="shortcut-controls"><input id="cancel-shortcut" type="text" value="Esc" readonly aria-describedby="shortcut-help shortcut-error" aria-label="Cancellation shortcut. Click and press a key or combination."><button id="reset-cancel-shortcut" class="text-button" type="button">Reset</button></div>
+          <p id="shortcut-status" class="subtle" role="status" aria-live="polite"></p><p id="shortcut-error" class="error-text" role="alert" hidden></p>
+        </div>
+        <div id="desktop-permissions" class="device-summary permissions-card" hidden><div><strong id="desktop-permissions-title">Desktop permissions</strong><p id="desktop-permissions-summary" class="subtle">Checking Screen Recording and Accessibility…</p></div><div class="heading-actions"><button id="check-permissions" class="text-button" type="button">Check</button><button id="grant-permissions" class="permission-grant" type="button" hidden>Grant</button></div></div>
+      </section>
+      <section id="paired-settings" class="settings-section" aria-labelledby="connection-title" hidden><h2 id="connection-title">Connection</h2><div class="setting-row"><div><strong>Disconnect this device</strong><p class="subtle">Reconnect later with a new pairing code.</p></div><button id="unpair" class="text-button destructive" type="button">Disconnect</button></div></section>
+    </section>
+  </main>
+  <script src="./renderer.js"></script>
+</body>
+</html>

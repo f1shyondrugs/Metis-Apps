@@ -6,7 +6,7 @@ const path = require('node:path');
 const os = require('node:os');
 const http = require('node:http');
 const { once } = require('node:events');
-const { createDesktop } = require('../main.cjs');
+const { createDesktop } = require('../src/main/web-window.cjs');
 const testData = fs.mkdtempSync(path.join(os.tmpdir(), 'metis-apps-test-'));
 app.setPath('userData', testData);
 app.setName('Metis AI Test');

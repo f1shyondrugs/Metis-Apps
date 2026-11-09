@@ -1,56 +1,82 @@
-name: Windows desktop
+name: Metis desktop releases
+
 on:
   push:
     branches: [main]
-    paths: ['windows/**', '.github/workflows/windows.yml']
-    tags: ['desktop-v*']
+    tags: ["v*"]
   pull_request:
-    paths: ['windows/**', '.github/workflows/windows.yml']
-  workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
-  windows:
-    runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: windows
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            command: build:win
+          - os: macos-latest
+            platform: macos
+            command: build:mac
+          - os: ubuntu-latest
+            platform: linux
+            command: build:linux
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: 22
           cache: npm
-          cache-dependency-path: windows/package-lock.json
-      - run: npm ci
-      - run: npm run check
-      - run: npm test
-      - run: npm run test:e2e
-      - run: npm run build:win
-      - run: ./tests/installer-smoke.ps1
+          cache-dependency-path: desktop/package-lock.json
+      - name: Confirm release tag matches app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: test "v$(node -p "require('./desktop/package.json').version")" = "${{ github.ref_name }}"
+      - name: Install dependencies
+        run: npm ci --prefix desktop
+      - name: Test desktop and device modules
+        run: npm run check --prefix desktop && npm test --prefix desktop
+      - name: Electron integration tests
+        shell: bash
+        run: |
+          if [ '${{ matrix.platform }}' = linux ]; then xvfb-run -a npm run test:e2e --prefix desktop; else npm run test:e2e --prefix desktop; fi
+      - name: Build desktop installer
+        run: npm run ${{ matrix.command }} --prefix desktop -- --publish never
+      - name: Verify Windows install, background operation and uninstall
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: ./desktop/tests/installer-smoke.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: Metis-AI-Windows
+          name: metis-desktop-${{ matrix.platform }}
           path: |
-            windows/dist/*.exe
-            windows/dist/*.blockmap
-            windows/test-results/*.png
+            desktop/dist/*.exe
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+            desktop/dist/*.AppImage
+            desktop/dist/*.yml
+            desktop/dist/*.blockmap
           if-no-files-found: error
+          retention-days: 7
   release:
-    if: startsWith(github.ref, 'refs/tags/desktop-v')
-    needs: windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: Metis-AI-Windows
-          path: artifacts
-      - name: Publish desktop prototype
+          pattern: metis-desktop-*
+          path: release
+          merge-multiple: true
+      - name: Publish complete release after every platform succeeds
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          gh release create "$RELEASE_TAG" artifacts/dist/*.exe artifacts/dist/*.blockmap --title "Metis AI Desktop ${RELEASE_TAG#desktop-v}" --prerelease --notes "Windows desktop prototype rendering the Metis website. Includes Start menu and desktop shortcuts and a Windows Apps uninstall entry. Unsigned prototype installer."
+        run: gh release create "${{ github.ref_name }}" release/* --title "Metis ${{ github.ref_name }}" --generate-notes --verify-tag --latest
