@@ -38,7 +38,10 @@ $process.Refresh()
 if ($process.HasExited) { throw 'Closing the main window stopped background operation.' }
 Stop-Process -Id $process.Id
 Write-Output 'WINDOWS_BACKGROUND_CLOSE_OK'
-$uninstaller = Join-Path $installDir 'Uninstall Metis.exe'
+if ($entries[0].UninstallString -notmatch '^"([^"]+)"') { throw 'Registered uninstall command is invalid.' }
+$uninstaller = $Matches[1]
+if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($uninstaller)) -ne [IO.Path]::GetFullPath($installDir)) { throw 'Uninstaller is outside the isolated test installation.' }
+if (-not (Test-Path $uninstaller)) { throw 'Registered uninstaller missing.' }
 Start-Process -FilePath $uninstaller -ArgumentList '/S /currentuser' -Wait
 $deadline = (Get-Date).AddSeconds(30)
 while (((Test-Path $exe) -or (Test-Path $uninstallKey)) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
