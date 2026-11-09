@@ -41,6 +41,9 @@ jobs:
         run: npm ci --prefix desktop
       - name: Test desktop and device modules
         run: npm run check --prefix desktop && npm test --prefix desktop
+      - name: Configure Electron sandbox on Linux CI
+        if: matrix.platform == 'linux'
+        run: sudo chown root:root desktop/node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 desktop/node_modules/electron/dist/chrome-sandbox
       - name: Electron integration tests
         shell: bash
         run: |

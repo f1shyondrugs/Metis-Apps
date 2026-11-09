@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
+import { fileURLToPath } from "node:url";
 import {EventEmitter} from "node:events";
 import {createRequire} from "node:module";
 import test from "node:test";
@@ -16,7 +17,7 @@ function fixture(t){
  class Worker extends EventEmitter { constructor(){super();pending.push((error,stdout)=>this.emit("message",error?{ok:false,error:error.message}:{ok:true,stdout:stdout.trim()}))} terminate(){return Promise.resolve()} }
  const child={spawnSync(){syncCalls++;return{status:0,stdout:"True",stderr:""}},execFile(_file,_args,_options,callback){pending.push(callback);return{}}};
  const context=vm.createContext({require:name=>name==="electron"?electron:name==="electron-updater"?{autoUpdater:{}}:name==="node:child_process"?child:name==="node:worker_threads"?{Worker}:require(name),
-  process:{platform:"win32",env:{}},Buffer,URL,AbortSignal,console,setTimeout,clearTimeout,setInterval,clearInterval,__dirname:path.resolve("desktop"),module:{exports:{}}});
+  process:{platform:"win32",env:{}},Buffer,URL,AbortSignal,console,setTimeout,clearTimeout,setInterval,clearInterval,__dirname:fileURLToPath(new URL("../desktop",import.meta.url)),module:{exports:{}}});
  vm.runInContext(source+'\nmodule.exports={broadcast,getAutostart,setAutostart,setup(t,w){tray=t;window=w;}};',context);
  const api=context.module.exports;api.setup({setToolTip(){},setContextMenu:template=>menus.push(template)},{webContents:{send:(...args)=>sent.push(args)}});
  return{api,pending,menus,sent,get syncCalls(){return syncCalls}};

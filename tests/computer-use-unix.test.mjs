@@ -24,5 +24,13 @@ test("a locked X11 session cannot receive input", async () => {
   assert.equal(commands.some(([command, args]) => command === "xdotool" && args.includes("click")), false);
 });
 test("macOS without the native library rejects desktop requests", async () => {
-  await assert.rejects(unixComputerUse({ operation: "status" }, { platform: "darwin" }));
+  const previous = process.env.METIS_DESKTOP_LIB;
+  process.env.METIS_DESKTOP_LIB = new URL("./missing-desktop-library.dylib", import.meta.url).pathname;
+  try {
+    const isolated = await import("../desktop/computer-use-unix.mjs?missing-library");
+    await assert.rejects(isolated.unixComputerUse({ operation: "status" }, { platform: "darwin" }));
+  } finally {
+    if (previous === undefined) delete process.env.METIS_DESKTOP_LIB;
+    else process.env.METIS_DESKTOP_LIB = previous;
+  }
 });

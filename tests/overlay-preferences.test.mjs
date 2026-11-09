@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import vm from "node:vm";
+import { fileURLToPath } from "node:url";
 import preferencesPackage from "../desktop/overlay-preferences.cjs";
 const { createOverlayPreferences } = preferencesPackage;
 
@@ -57,7 +58,7 @@ test("real main IPC validates, broadcasts a successful toggle, and rolls back fa
   const context = vm.createContext({
     require: name => name === "electron" ? electron : name === "electron-updater" ? {autoUpdater:{}} : require(name),
     process, Buffer, console, setTimeout, clearTimeout, setInterval, clearInterval,
-    __dirname: path.resolve(new URL("../desktop", import.meta.url).pathname),
+    __dirname: fileURLToPath(new URL("../desktop", import.meta.url)),
     module: { exports: {} },
   });
   try {

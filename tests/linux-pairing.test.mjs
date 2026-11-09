@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
+import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import test from "node:test";
 const require = createRequire(new URL("../desktop/main.cjs", import.meta.url));
@@ -25,7 +26,7 @@ test("Linux hub:pair without keyring or X11 saves, resumes and unpairs a termina
       : name === "./computer-use-overlay.cjs" ? { createComputerUseOverlay() {} }
       : name === "./credential-store.cjs" ? { createCredentialStore: options => require("./credential-store.cjs").createCredentialStore({ ...options, platform: "linux" }) } : require(name),
     process: { platform: "linux", env: { WAYLAND_DISPLAY: "wayland-1", XDG_SESSION_TYPE: "wayland" } },
-    module: { exports: {} }, __dirname: path.dirname(new URL("../desktop/main.cjs", import.meta.url).pathname), Buffer, URL, AbortSignal, console,
+    module: { exports: {} }, __dirname: path.dirname(fileURLToPath(new URL("../desktop/main.cjs", import.meta.url))), Buffer, URL, AbortSignal, console,
     fetch: async (url, init) => { enrollment = { url, body: JSON.parse(init.body) };
       return { ok: true, json: async () => ({ client: { id: "test-device", permissionMode: "user" }, credential: "test-only-secret" }) }; },
   });
