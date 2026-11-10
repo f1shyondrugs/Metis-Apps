@@ -248,9 +248,11 @@ function cancelComputerUse() {
 }
 
 function trayImage() {
-  const file = path.join(__dirname, "assets", process.platform === "win32" ? "icon.ico" : "icon.png");
+  const file = path.join(__dirname, "assets", process.platform === "darwin" ? "trayTemplate.png" : process.platform === "win32" ? "icon.ico" : "icon.png");
   const size = process.platform === "darwin" ? 18 : 16;
-  return nativeImage.createFromPath(file).resize({ width: size, height: size, quality: "best" });
+  const image = nativeImage.createFromPath(file).resize({ width: size, height: size, quality: "best" });
+  if (process.platform === "darwin") image.setTemplateImage(true);
+  return image;
 }
 
 function updateTray() {

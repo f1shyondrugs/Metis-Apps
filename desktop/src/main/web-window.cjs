@@ -48,6 +48,7 @@ async function createDesktop({ onDevices = () => {}, shouldHide = () => false, i
     const remote = new WebContentsView({
       webPreferences: {
         partition: 'persist:metis-web',
+        preload: path.join(__dirname, 'web-app-preload.cjs'),
         sandbox: true, contextIsolation: true, nodeIntegration: false,
         webSecurity: true
       }
@@ -113,6 +114,12 @@ async function createDesktop({ onDevices = () => {}, shouldHide = () => false, i
         event.senderFrame.url !== shellUrl) throw new Error('Access denied.');
   }
   const handlers = {
+    'desktop:open-device-settings': (event) => {
+      const contents = view?.webContents;
+      if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
+          !sameOrigin(event.senderFrame.url, server)) throw new Error('Access denied.');
+      onDevices();
+    },
     'desktop:state': (event) => { assertLocal(event); return state; },
     'desktop:connect': (event, value) => {
       assertLocal(event);

@@ -1,11 +1,6 @@
+"""Compatibility entrypoint for the canonical SVG-based icon generator."""
 from pathlib import Path
-from PIL import Image
-import shutil
+import subprocess
 
 root = Path(__file__).resolve().parent
-source = root.parents[1] / "public" / "favicon.ico"
-assets = root / "assets"
-assets.mkdir(exist_ok=True)
-shutil.copyfile(source, assets / "icon.ico")
-with Image.open(source) as icon:
-    icon.convert("RGBA").resize((512, 512), Image.LANCZOS).save(assets / "icon.png")
+subprocess.run(["npm", "run", "generate:icons"], cwd=root, check=True)

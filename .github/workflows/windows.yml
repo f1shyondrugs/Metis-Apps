@@ -39,6 +39,8 @@ jobs:
         run: test "v$(node -p "require('./desktop/package.json').version")" = "${{ github.ref_name }}"
       - name: Install dependencies
         run: npm ci --prefix desktop
+      - name: Generate icons from the canonical Metis M
+        run: npm run generate:icons --prefix desktop
       - name: Test desktop and device modules
         run: npm run check --prefix desktop && npm test --prefix desktop
       - name: Configure Electron sandbox on Linux CI

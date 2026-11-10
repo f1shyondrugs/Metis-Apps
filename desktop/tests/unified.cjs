@@ -76,8 +76,10 @@ async function main() {
   const remote = desktop.getView().webContents;
   assert.deepEqual(await remote.executeJavaScript('[typeof require, typeof process, typeof metis, typeof metisDesktop]'),
     ['undefined', 'undefined', 'undefined', 'undefined']);
-  api.showWindow();
+  await remote.executeJavaScript('metisApp.openDeviceSettings()');
   const hub = api.getDeviceWindow();
+  assert.equal(hub.isVisible(), true);
+  console.log('WEB_SETTINGS_OPENS_LOCAL_DEVICE_HUB_OK');
   await waitFor(() => !hub.webContents.isLoading());
   const state = await hub.webContents.executeJavaScript('metis.state()');
   assert.equal(state.paired, true); assert.equal(state.credential, undefined);

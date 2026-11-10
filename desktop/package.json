@@ -1,6 +1,6 @@
 {
   "name": "metis-ai-remote-client",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "description": "Metis desktop app with integrated device connection",
   "main": "main.cjs",
@@ -15,7 +15,8 @@
     "build:dir": "npm run prepare:client && electron-builder --dir",
     "test": "npm run prepare:client && node --test ../tests/*.test.mjs tests/policy.test.cjs",
     "check": "node scripts/check.cjs",
-    "test:e2e": "electron tests/smoke.cjs && electron tests/unified.cjs"
+    "test:e2e": "electron tests/smoke.cjs && electron tests/unified.cjs",
+    "generate:icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "electron-updater": "^6.6.2",
@@ -24,7 +25,9 @@
   },
   "devDependencies": {
     "electron": "^44.4.5",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "png-to-ico": "3.0.2",
+    "sharp": "0.35.5"
   },
   "build": {
     "appId": "ai.metis.remoteclient",
@@ -56,6 +59,7 @@
       "libmetisdesktop.dylib",
       "assets/icon.ico",
       "assets/icon.png",
+      "assets/trayTemplate.png",
       "assets/lucide-LICENSE.txt",
       "node_modules/**/*",
       "package.json",
