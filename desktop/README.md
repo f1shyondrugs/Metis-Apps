@@ -8,6 +8,14 @@ The main window opens Metis. **Metis → Change server** selects your server; **
 
 Signing into the website does not pair your computer. Pair separately in **Device settings** with the code from Metis Settings → Devices. Pairing does not sign into the website. Device permissions remain managed by the server and the operating system.
 
+## Desktop Assistant
+
+Hold **Ctrl+Shift+Space** to record. Release before three seconds to finish, or keep holding for three seconds to lock; press the shortcut again or use Stop to finish a locked recording. Escape closes the assistant and cancels recording. The tray also offers **Open Desktop Assistant**. Global key listening requires Accessibility on macOS and X11 on Linux; the tray remains available when the hotkey is unavailable.
+
+The floating text field remains available without voice. It uses the signed-in account's **Voice & dictionary** configuration: batch Whisper inserts its completed transcript, and realtime transcription additionally shows live words. Review the text and press Enter or Send. Each send attaches fresh screenshots of **all connected monitors** (up to the existing ten-attachment limit), their names/bounds/scales and the paired device ID. Screen recording failures keep the draft and prevent a partial screen submission. Dismissing the window does not cancel an already submitted server job; **Open in Metis** provides the full chat controls.
+
+Inside the desktop app, **Settings → Remote Client** shows the local connection, app version, assistant shortcut and **Open Remote Client Device Settings**. The extra category is hidden in normal browsers. Website sign-in and device pairing remain separate; pair this computer and sign in to use the assistant. The server must include the desktop-assistant page.
+
 ## Layout
 
 - `main.cjs`: app lifecycle, local device settings, tray, startup and updates.
@@ -17,7 +25,7 @@ Signing into the website does not pair your computer. Pair separately in **Devic
 - `ui/`: server selection, loading and connection error views.
 - `tests/` and repository `tests/`: Electron integration and device regression suites.
 
-`prepare-client.cjs` stages protocol/native sources in the packaged app root and compiles the macOS native library. Generated files are ignored. The remote web view has no Node integration. Its narrow preload exposes only `metisApp.openDeviceSettings()` so Settings → Devices can open the local device window. The main process accepts this action only from the current web view's main frame on the configured server origin. Device commands, pairing credentials and the full device IPC remain exclusive to the exact bundled local main frame.
+`prepare-client.cjs` stages protocol/native sources in the packaged app root and compiles the macOS native library. Generated files are ignored. The remote web view has no Node integration. Its narrow preload exposes `metisApp.openDeviceSettings()`, read-only `deviceState()` and `openAssistant()` for the local settings category. The assistant has its own preload and IPC sender/path guards, sharing the web session without exposing credentials or arbitrary device commands. The main process accepts this action only from the current web view's main frame on the configured server origin. Device commands, pairing credentials and the full device IPC remain exclusive to the exact bundled local main frame.
 
 The desktop application icon uses the M outline in `../assets/metis-mark.svg`. Run `npm run generate:icons` to produce its PNG and Windows ICO. CI regenerates these icons before packaging. The local device window, server-selection view and tray retain the original hands branding from `assets/brand.png`.
 

@@ -1,6 +1,6 @@
 {
   "name": "metis-ai-remote-client",
-  "version": "1.5.2",
+  "version": "1.6.0",
   "private": true,
   "description": "Metis desktop app with integrated device connection",
   "main": "main.cjs",
@@ -13,14 +13,15 @@
     "build:mac": "npm run prepare:client && electron-builder --mac --arm64",
     "build:linux": "npm run prepare:client && electron-builder --linux AppImage --x64",
     "build:dir": "npm run prepare:client && electron-builder --dir",
-    "test": "npm run prepare:client && node --test ../tests/*.test.mjs tests/policy.test.cjs",
+    "test": "npm run prepare:client && node --test ../tests/*.test.mjs tests/policy.test.cjs tests/assistant-hold.test.cjs",
     "check": "node scripts/check.cjs",
-    "test:e2e": "electron tests/smoke.cjs && electron tests/unified.cjs",
+    "test:e2e": "electron tests/smoke.cjs && electron tests/unified.cjs && electron tests/assistant.cjs",
     "generate:icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "electron-updater": "^6.6.2",
     "koffi": "^2.16.3",
+    "uiohook-napi": "1.5.5",
     "ws": "^8.21.2"
   },
   "devDependencies": {
@@ -39,7 +40,8 @@
       "computer-use.mjs",
       "computer-use-unix.mjs",
       "libmetisdesktop.dylib",
-      "**/node_modules/koffi/**"
+      "**/node_modules/koffi/**",
+      "**/node_modules/uiohook-napi/**"
     ],
     "files": [
       "main.cjs",

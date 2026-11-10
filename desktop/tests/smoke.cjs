@@ -11,6 +11,7 @@ const { createDesktop } = require('../src/main/web-window.cjs');
 const testData = fs.mkdtempSync(path.join(os.tmpdir(), 'metis-apps-test-'));
 app.setPath('userData', testData);
 app.setName('Metis AI Test');
+app.setAppUserModelId('ai.metis.smoke.test');
 const timeout = setTimeout(() => { console.error('SMOKE_TIMEOUT'); app.exit(1); }, 60000);
 async function waitFor(predicate) {
   const end = Date.now() + 15000;
@@ -36,7 +37,7 @@ async function main() {
   assert.equal(await wc.executeJavaScript('document.getElementById("app").textContent'), 'Metis test server');
   assert.deepEqual(await wc.executeJavaScript('[typeof require, typeof process, typeof metisDesktop]'), ['undefined', 'undefined', 'undefined']);
   console.log('REMOTE_RENDER_AND_ISOLATION_OK');
-  assert.deepEqual(await wc.executeJavaScript('Object.keys(metisApp)'), ['openDeviceSettings']);
+  assert.deepEqual(await wc.executeJavaScript('Object.keys(metisApp)'), ['openDeviceSettings','deviceState','openAssistant']);
   assert.equal(await wc.executeJavaScript('typeof document.getElementById("child").contentWindow.metisApp'), 'undefined');
   await wc.executeJavaScript('metisApp.openDeviceSettings()');
   assert.equal(openedDevices, 1);

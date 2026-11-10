@@ -4,11 +4,12 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const ROOT = path.join(__dirname, '../..');
 const { DEFAULT_SERVER, normalizeServer, sameOrigin, externalUrl } = require(path.join(ROOT, 'policy.cjs'));
-const APP_ID = 'ai.metis.desktop';
+const APP_ID = process.env.METIS_DESKTOP_TEST_DATA ? 'ai.metis.desktop.test' : 'ai.metis.desktop';
+const { registerWebPermissions } = require('./web-permissions.cjs');
 const shellPath = path.join(ROOT, 'ui', 'index.html');
 const shellUrl = pathToFileURL(shellPath).href;
 
-async function createDesktop({ onDevices = () => {}, shouldHide = () => false, initialServer } = {}) {
+async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}), onAssistant = () => {}, shouldHide = () => false, initialServer } = {}) {
   const configPath = path.join(app.getPath('userData'), 'server.json');
   let server = initialServer ? normalizeServer(initialServer) : DEFAULT_SERVER;
   try { server = normalizeServer(JSON.parse(fs.readFileSync(configPath, 'utf8')).url); } catch {}
@@ -21,7 +22,6 @@ async function createDesktop({ onDevices = () => {}, shouldHide = () => false, i
   let view;
   let generation = 0;
   let state = { mode: 'loading', server, message: '' };
-  let permissionGrants = new Set();
   const update = (mode, message = '') => {
     state = { mode, server, message };
     if (!win.isDestroyed()) win.webContents.send('desktop:state-changed', state);
@@ -32,7 +32,6 @@ async function createDesktop({ onDevices = () => {}, shouldHide = () => false, i
     if (!win.isDestroyed()) win.contentView.removeChildView(view);
     if (!view.webContents.isDestroyed()) view.webContents.close();
     view = undefined;
-    permissionGrants.clear();
   };
   const resize = () => {
     if (view) { const [width, height] = win.getContentSize(); view.setBounds({ x: 0, y: 0, width, height }); }
@@ -58,24 +57,7 @@ async function createDesktop({ onDevices = () => {}, shouldHide = () => false, i
     remote.setVisible(false);
     resize();
     const contents = remote.webContents;
-    const ses = contents.session;
-    const permissionKey = (permission, details) => permission + ':' + (details.mediaTypes || []).join(',');
-    ses.setPermissionCheckHandler((wc, permission, origin, details) =>
-      wc === contents && sameOrigin(origin, server) && permissionGrants.has(permissionKey(permission, details)));
-    ses.setPermissionRequestHandler(async (wc, permission, callback, details) => {
-      const allowed = ['media', 'notifications', 'clipboard-sanitized-write'];
-      if (wc !== contents || !sameOrigin(wc.getURL(), server) ||
-          !sameOrigin(details.requestingUrl || wc.getURL(), server) || !allowed.includes(permission)) return callback(false);
-      if (permission === 'clipboard-sanitized-write') return callback(true);
-      const { response } = await dialog.showMessageBox(win, {
-        type: 'question', title: 'Metis',
-        message: permission === 'media' ? 'Allow microphone or camera access?' : 'Allow notifications?',
-        detail: server, buttons: ['Deny', 'Allow'], defaultId: 0, cancelId: 0
-      });
-      const accepted = response === 1 && generation === currentGeneration;
-      if (accepted) permissionGrants.add(permissionKey(permission, details));
-      callback(accepted);
-    });
+    registerWebPermissions(contents, server, win);
     contents.setWindowOpenHandler(({ url }) => {
       if (sameOrigin(url, server)) contents.loadURL(url).catch(() => {});
       else openExternal(url);
@@ -119,6 +101,18 @@ async function createDesktop({ onDevices = () => {}, shouldHide = () => false, i
       if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
           !sameOrigin(event.senderFrame.url, server)) throw new Error('Access denied.');
       onDevices();
+    },
+    'desktop:device-state': event => {
+      const contents = view?.webContents;
+      if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
+          !sameOrigin(event.senderFrame.url, server)) throw new Error('Access denied.');
+      return onDeviceState();
+    },
+    'desktop:assistant': event => {
+      const contents = view?.webContents;
+      if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
+          !sameOrigin(event.senderFrame.url, server)) throw new Error('Access denied.');
+      return onAssistant();
     },
     'desktop:state': (event) => { assertLocal(event); return state; },
     'desktop:connect': (event, value) => {

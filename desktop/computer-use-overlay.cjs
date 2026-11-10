@@ -12,7 +12,7 @@ function edgeHtml() {
     '<g mask="url(#edge-mask)"><rect width="100%" height="100%" fill="var(--primary)" opacity=".28"/><rect class="dots" width="100%" height="100%" fill="url(#dots)" opacity=".95"/></g></svg>';
 }
 
-function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape") {
+function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape", mode = "computer") {
   const initial = JSON.stringify(appearance.normalize(theme) || appearance.fallback).replace(/</g, "\\u003c");
   const keyLabel = shortcut.label(cancelShortcut, process.platform);
   return `<!doctype html>
@@ -27,7 +27,7 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; pointer-events: none; animation: overlay-enter 700ms ease-out both; }
   .edge { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 3; overflow: hidden; pointer-events: none; }
   @keyframes overlay-enter { from { opacity: 0; } to { opacity: 1; } }
-  @keyframes notice-enter { from { opacity: 0; transform: translate(-50%,-7px); } to { opacity: 1; transform: translate(-50%,0); } }
+  @keyframes notice-enter { from { opacity: 0; transform: translate(-50%,calc(-100% - 24px)); } to { opacity: 1; transform: translate(-50%,0); } }
   .notice { position: fixed; z-index: 4; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 9px 13px; border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--background) 94%, transparent); color: var(--foreground); box-shadow: 0 4px 16px #0003; font-size: 12px; line-height: 18px; white-space: nowrap; animation: notice-enter 800ms cubic-bezier(.2,.7,.2,1) both; }
   .label { font-weight: 600; overflow-wrap: anywhere; }
   .cancel { max-width: 55%; min-width: 0; display: flex; align-items: center; gap: 5px; padding-left: 12px; border-left: 1px solid var(--border); color: var(--muted-foreground); }
@@ -59,6 +59,18 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
   const perimeter=svg.querySelector(".perimeter"), pattern=svg.querySelector("pattern");
   const dot=pattern.querySelector("circle"), dots=svg.querySelector(".dots");
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  let enteredAt=performance.now(), voiceLevel=0, voiceRecording=false;
+  window.metisVoiceLevel = value => { voiceLevel=Math.max(0,Math.min(1,Number(value)||0)); };
+  if (OVERLAY_VOICE_MODE) {
+    document.querySelector(".label").textContent="Metis Assistant";
+    document.querySelector(".edge").style.visibility="hidden";
+  }
+  window.metisVoiceState = (recording,label) => {
+    if(recording&&!voiceRecording)enteredAt=performance.now();
+    voiceRecording=recording;
+    document.querySelector(".label").textContent=label;
+    document.querySelector(".edge").style.visibility=recording?"visible":"hidden";
+  };
   let points=[], waves=6, frame, elapsed=0, previous=performance.now(), lastDraw=-Infinity;
   function resize() {
     const width=svg.clientWidth, height=svg.clientHeight;
@@ -80,9 +92,11 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
   }
   function draw() {
     const phase=elapsed/4200, tau=2*Math.PI;
+    const progress=reduced.matches?1:1-Math.pow(1-Math.min(1,(performance.now()-enteredAt)/720),3);
     const moved=points.map(p=>{
       // Integer harmonics close seamlessly at the first/last sample.
-      const displacement=8*Math.sin(tau*waves*p.t-phase)+4*Math.sin(tau*(waves+3)*p.t+phase*.7);
+      const strength=1+voiceLevel*3.5;
+      const displacement=(8*Math.sin(tau*waves*p.t-phase)+4*Math.sin(tau*(waves+3)*p.t+phase*.7))*strength+voiceLevel*52-(1-progress)*90;
       return {x:p.x+p.nx*displacement,y:p.y+p.ny*displacement};
     });
     const pair=p=>p.x.toFixed(2)+" "+p.y.toFixed(2);
@@ -106,11 +120,12 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
     else if (!document.hidden) { previous=performance.now(); frame=requestAnimationFrame(tick); }
   }
   addEventListener("resize",resize);
-  document.addEventListener("visibilitychange",updateMotion);
+  document.addEventListener("visibilitychange",()=>{ if(!document.hidden)enteredAt=performance.now(); updateMotion(); });
   reduced.addEventListener("change",updateMotion);
   resize(); updateMotion();
 </script></body>
 </html>`
+    .replace("OVERLAY_VOICE_MODE",()=>String(mode === "voice"))
     .replace("OVERLAY_EDGES",edgeHtml)
     .replaceAll("OVERLAY_KEY",keyLabel)
     .replace("OVERLAY_CURSOR",()=>"<svg class=\"cursor\" aria-hidden=\"true\" viewBox=\"0 0 52 48\"><defs><linearGradient id=\"metis-browser-cursor-glass\" x1=\"7\" y1=\"4\" x2=\"39\" y2=\"42\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-color=\"rgba(42,55,63,0.72)\"/><stop offset=\".44\" stop-color=\"rgba(18,28,34,0.54)\"/><stop offset=\"1\" stop-color=\"rgba(6,11,15,0.34)\"/></linearGradient><linearGradient id=\"metis-browser-cursor-edge\" x1=\"3\" y1=\"4\" x2=\"40\" y2=\"43\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-color=\"rgba(255,255,255,0.96)\"/><stop offset=\".34\" stop-color=\"rgba(191,232,241,.78)\"/><stop offset=\".7\" stop-color=\"rgba(117,166,180,.58)\"/><stop offset=\"1\" stop-color=\"rgba(238,247,250,.84)\"/></linearGradient><radialGradient id=\"metis-browser-cursor-glow\" cx=\"0\" cy=\"0\" r=\"1\" gradientTransform=\"translate(15 12) rotate(34) scale(31 24)\" gradientUnits=\"userSpaceOnUse\"><stop stop-color=\"rgba(224,248,255,.3)\"/><stop offset=\"1\" stop-color=\"rgba(224,248,255,0)\"/></radialGradient></defs><path d=\"M7.1 4.15C4.05 3.4 1.72 6.15 2.8 9.08l13.35 33.55c1.04 2.78 4.82 3.08 6.28.48l7.35-17.38c1.1-2.57 3.2-4.55 5.83-5.51l12.78-4.7c3.46-1.27 3.46-6.17-.03-7.39L7.1 4.15Z\" fill=\"url(#metis-browser-cursor-glass)\" stroke=\"url(#metis-browser-cursor-edge)\" stroke-width=\"1.3\" stroke-linejoin=\"round\"/><path d=\"M7.35 5.8 18.02 40.9c.43 1.46 2.43 1.61 3.08.24l6.98-15.08c1.28-2.76 3.59-4.91 6.43-5.99l12.18-4.6\" fill=\"none\" stroke=\"rgba(238,252,255,.42)\" stroke-width=\".9\" stroke-linecap=\"round\"/><path d=\"M6.1 5.05 48.1 12.95 35.25 17.7 9.3 9.2Z\" fill=\"url(#metis-browser-cursor-glow)\"/></svg>")
@@ -120,10 +135,11 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
 
 const IDLE_MS = 45_000;
 
-function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCancel, hideFromCapture = true, cancelShortcut = "Escape" }) {
+function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCancel, hideFromCapture = true, cancelShortcut = "Escape", mode = "computer" }) {
   const windows = new Map();
   let currentAppearance = appearance.fallback;
   let active = false;
+  let voiceState = {recording:false,label:"Metis Assistant"};
   let suspended = false;
   let timer;
   let cursorHideTimer;
@@ -180,10 +196,11 @@ function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCan
     // Electron, which can stall the system pointer whenever its main loop is busy.
     overlay.setIgnoreMouseEvents(true);
     overlay.setContentProtection(hideFromCapture);
-    overlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(createOverlayHtml(currentAppearance, cancelShortcut))}`);
+    overlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(createOverlayHtml(currentAppearance, cancelShortcut, mode))}`);
     overlay.webContents.on("did-finish-load", () => {
       setAppearance(currentAppearance);
       renderShortcut();
+      if (mode === "voice") setVoiceState(voiceState.recording,voiceState.label);
       if (active && !suspended && !overlay.isDestroyed()) {
         overlay.showInactive();
         renderCursor(display, overlay);
@@ -265,9 +282,8 @@ function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCan
   function touch() {
     active = true;
     clearTimeout(timer);
-    timer = setTimeout(hide, IDLE_MS);
-    timer.unref?.();
-    if (!registeredShortcut) {
+    if (mode !== "voice") { timer = setTimeout(hide, IDLE_MS); timer.unref?.(); }
+    if (mode !== "voice" && !registeredShortcut) {
       if (!registerShortcut(cancelShortcut)) {
         hide();
         throw new Error("Cancellation shortcut is unavailable. Choose another shortcut in the Remote Client.");
@@ -356,7 +372,16 @@ function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCan
   screen.on("display-removed", sync);
   screen.on("display-metrics-changed", sync);
 
-  return { touch, hide, setAppearance, setHideFromCapture, suspendCapture, resumeCapture, setCancelShortcut, suppressInjectedShortcut, updateCursor, hideCursor };
+  function setVoiceState(recording,label) {
+    voiceState={recording:Boolean(recording),label:String(label).slice(0,100)};
+    for (const overlay of windows.values()) runScript(overlay, "window.metisVoiceState?.("+JSON.stringify(voiceState.recording)+","+JSON.stringify(voiceState.label)+")");
+  }
+  function setVoiceLevel(value) {
+    const level=Math.max(0,Math.min(1,Number(value)||0));
+    for (const overlay of windows.values()) runScript(overlay, "window.metisVoiceLevel?.("+level.toFixed(2)+")");
+  }
+
+  return { touch, hide, setVoiceState, setVoiceLevel, setAppearance, setHideFromCapture, suspendCapture, resumeCapture, setCancelShortcut, suppressInjectedShortcut, updateCursor, hideCursor };
 }
 
 module.exports = { createComputerUseOverlay, createOverlayHtml };

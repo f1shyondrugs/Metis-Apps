@@ -51,7 +51,7 @@ test("real main IPC validates, broadcasts a successful toggle, and rolls back fa
   const sent = [];
   let applied = true;
   const electron = {
-    app: { getPath: () => dir, setPath() {}, setName() {}, commandLine: { appendSwitch() {} }, requestSingleInstanceLock: () => false, quit() {} },
+    app: { getPath: () => dir, getVersion: () => "test", setPath() {}, setName() {}, commandLine: { appendSwitch() {} }, requestSingleInstanceLock: () => false, quit() {} },
     ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
     safeStorage: {},
   };
