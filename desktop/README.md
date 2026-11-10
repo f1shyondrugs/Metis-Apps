@@ -17,7 +17,9 @@ Signing into the website does not pair your computer. Pair separately in **Devic
 - `ui/`: server selection, loading and connection error views.
 - `tests/` and repository `tests/`: Electron integration and device regression suites.
 
-`prepare-client.cjs` stages protocol/native sources in the packaged app root and compiles the macOS native library. Generated files are ignored. The remote web view has no preload, Node integration or local device API. Only the exact bundled local main frame may call device IPC.
+`prepare-client.cjs` stages protocol/native sources in the packaged app root and compiles the macOS native library. Generated files are ignored. The remote web view has no Node integration. Its narrow preload exposes only `metisApp.openDeviceSettings()` so Settings → Devices can open the local device window. The main process accepts this action only from the current web view's main frame on the configured server origin. Device commands, pairing credentials and the full device IPC remain exclusive to the exact bundled local main frame.
+
+The canonical brand outline is `../assets/metis-mark.svg`. Run `npm run generate:icons` to produce the application PNG, Windows ICO and macOS template tray image from that M. CI regenerates icons before packaging.
 
 ## Build and test
 
