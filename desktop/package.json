@@ -13,6 +13,7 @@
     "build:mac": "npm run prepare:client && electron-builder --mac --arm64",
     "build:linux": "npm run prepare:client && electron-builder --linux AppImage --x64",
     "build:dir": "npm run prepare:client && electron-builder --dir",
+    "pretest": "node -e \"require('electron')\"",
     "test": "npm run prepare:client && node --test ../tests/*.test.mjs tests/policy.test.cjs tests/assistant-hold.test.cjs",
     "check": "node scripts/check.cjs",
     "test:e2e": "electron tests/smoke.cjs && electron tests/unified.cjs && electron tests/assistant.cjs",

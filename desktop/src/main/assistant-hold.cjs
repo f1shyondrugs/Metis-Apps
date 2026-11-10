@@ -15,6 +15,7 @@ function createHoldGesture(emit, { delay = 3000, schedule = setTimeout, clear = 
       if (!locked && !stopping) emit('stop');
       stopping = false;
     },
+    finish() { locked=false; clear(timer); if(down)stopping=true; },
     cancel() { down = false; locked = false; stopping = false; clear(timer); },
     get locked() { return locked; },
   };

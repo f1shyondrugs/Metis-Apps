@@ -114,7 +114,7 @@ function createAssistant({ getServer, getDevice, onOpenChat, computerOverlay, ap
       if(!visible || !value || typeof value.recording!=='boolean' || typeof value.level!=='number' || !Number.isFinite(value.level))return;
       if(value.recording!==recording) {
         recording=value.recording;
-        if(!recording)gesture.cancel();
+        if(!recording)gesture.finish();
       }
       const allowed=["Metis Assistant","Metis is listening","Voice is not configured","Metis is working"];
       edges.setVoiceState(recording,recording?"Metis is listening":allowed.includes(value.status)?value.status:"Metis Assistant");
