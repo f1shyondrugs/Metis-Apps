@@ -7,7 +7,7 @@ function edgeHtml() {
   return '<svg class="edge" aria-hidden="true" preserveAspectRatio="none"><defs>'+
     '<path class="perimeter"/>'+
     '<pattern id="dots" width="8" height="8" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.3" fill="var(--primary)"/></pattern>'+
-    '<filter id="soft" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="7"/></filter>'+
+    '<filter id="soft" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="4"/></filter>'+
     '<mask id="edge-mask" maskUnits="userSpaceOnUse" style="mask-type:luminance"><rect width="100%" height="100%" fill="white"/><path class="wave" filter="url(#soft)" fill="black"/></mask></defs>'+
     '<g mask="url(#edge-mask)"><rect width="100%" height="100%" fill="var(--primary)" opacity=".28"/><rect class="dots" width="100%" height="100%" fill="url(#dots)" opacity=".95"/></g></svg>';
 }
@@ -76,7 +76,7 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
   function resize() {
     const width=svg.clientWidth, height=svg.clientHeight;
     svg.setAttribute("viewBox","0 0 "+width+" "+height);
-    const inset=Math.min(25,width/8,height/8), r=Math.min(20,(width-2*inset)/4,(height-2*inset)/4);
+    const inset=Math.min(12,width/8,height/8), r=Math.min(16,(width-2*inset)/4,(height-2*inset)/4);
     const left=inset, top=inset, right=width-inset, bottom=height-inset;
     perimeter.setAttribute("d","M"+(left+r)+" "+top+"H"+(right-r)+"A"+r+" "+r+" 0 0 1 "+right+" "+(top+r)+
       "V"+(bottom-r)+"A"+r+" "+r+" 0 0 1 "+(right-r)+" "+bottom+"H"+(left+r)+
@@ -92,13 +92,13 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
     draw();
   }
   function draw() {
-    const phase=elapsed/1200, tau=2*Math.PI;
+    const phase=elapsed/1800, tau=2*Math.PI;
     smoothLevel += (voiceLevel-smoothLevel)*.16;
     const progress=reduced.matches?1:1-Math.pow(1-Math.min(1,(performance.now()-enteredAt)/720),3);
     const moved=points.map(p=>{
       // Integer harmonics close seamlessly at the first/last sample.
-      const strength=1+smoothLevel*2.7;
-      const displacement=(12*Math.sin(tau*waves*p.t-phase)+6*Math.sin(tau*(waves+3)*p.t+phase*.7))*strength+smoothLevel*48-(1-progress)*100;
+      const strength=1+smoothLevel*.25;
+      const displacement=(3*Math.sin(tau*waves*p.t-phase)+1.5*Math.sin(tau*(waves+3)*p.t+phase*.7))*strength+smoothLevel*2-(1-progress)*100;
       return {x:p.x+p.nx*displacement,y:p.y+p.ny*displacement};
     });
     const pair=p=>p.x.toFixed(2)+" "+p.y.toFixed(2);
