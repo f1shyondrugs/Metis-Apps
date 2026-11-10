@@ -14,6 +14,7 @@ const user32=koffi.load('user32.dll'),getForeground=user32.func('uintptr_t GetFo
 const getStyle=user32.func('intptr_t GetWindowLongPtrW(uintptr_t,int)');
 const keybd=user32.func('void keybd_event(uint8_t,uint8_t,uint32_t,uintptr_t)');
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms)),proofs=[];
+const visualOnly=process.env.METIS_OVERLAY_PREVIEW_ONLY==='1';
 let assistant,server,submission,openedChat,uploads=0;
 let initialForeground=0;
 const deadline=setTimeout(()=>finish(Error('Visible overlay test timed out')),90000);
@@ -54,29 +55,30 @@ async function main(){
  const hwnd=Number(win.getNativeWindowHandle().readBigUInt64LE());
  await until(()=>wc.executeJavaScript('Boolean(document.querySelector("textarea"))'),'assistant renderer');
  await pause(250);
- assert.equal(win.isFocusable(),false);assert.equal(Number(getForeground()),initialForeground);
+ if(!visualOnly)assert.equal(Number(getForeground()),initialForeground);
+ assert.equal(win.isFocusable(),false);
  const passiveStyle=Number(getStyle(hwnd,-20));
  assert.ok(passiveStyle&0x08000000,'Windows WS_EX_NOACTIVATE is set');
  assert.ok(passiveStyle&0x00000020,'Windows WS_EX_TRANSPARENT passes pointer input through');
- proofs.push('FOREGROUND_APP_UNCHANGED_WITH_NATIVE_NOACTIVATE_AND_CLICKTHROUGH');
+ if(!visualOnly)proofs.push('FOREGROUND_APP_UNCHANGED_WITH_NATIVE_NOACTIVATE_AND_CLICKTHROUGH');
  const tap=async(vk,scan)=>{assert.equal(Number(getForeground()),hwnd,'Inject keys only into the owned overlay');keybd(vk,scan,0,0);await pause(30);keybd(vk,scan,2,0);await pause(100);};
- assistant.focusInput();
+ if(!visualOnly){assistant.focusInput();
  await until(()=>Number(getForeground())===hwnd,'explicit text focus');
  await until(()=>wc.executeJavaScript('document.activeElement===document.querySelector("textarea")'),'text caret after render');
  proofs.push('EXPLICIT_TEXT_MODE_FOCUSES_CARET');
  await tap(0x75,0x40);
  await until(()=>Number(getForeground())===initialForeground,'configured F6 returns foreground');
  assert.equal(win.isFocusable(),false);proofs.push('CUSTOM_F6_RETURNS_FOCUS_TO_PREVIOUS_APP');
- assistant.focusInput();await until(()=>Number(getForeground())===hwnd,'focus to compose');
+ assistant.focusInput();await until(()=>Number(getForeground())===hwnd,'focus to compose');}
  await wc.executeJavaScript('const field=document.querySelector("textarea");Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set.call(field,"What is on all my monitors?");field.dispatchEvent(new Event("input",{bubbles:true}));');
  await pause(100);await wc.executeJavaScript('document.querySelector("[aria-label=\\"Send message with all monitors\\"]").click()');
  await until(()=>submission,'accepted submission');assert.equal(submission.uploadIds.length,screen.getAllDisplays().length);
  await until(()=>wc.executeJavaScript('Boolean(document.querySelector("[aria-label=\\"Metis reply\\"]"))'),'reply');
- assert.equal(Number(getForeground()),initialForeground);
+ if(!visualOnly)assert.equal(Number(getForeground()),initialForeground);
  const info=await wc.executeJavaScript('({text:document.querySelector("[aria-label=\\"Your message\\"]").textContent,placeholder:document.querySelector("textarea").placeholder,right:document.querySelector(".assistant-conversation").getBoundingClientRect().right})');
  assert.equal(info.text,submission.message);assert.equal(info.placeholder,'Ask Metis');assert.ok(info.right>display.workArea.width-40);
  proofs.push('SAME_CANONICAL_MESSAGES_TOP_RIGHT_AND_ALL_MONITOR_CONTEXT');
- proofs.push('SEND_RESTORES_PREVIOUS_FOREGROUND');
+ if(!visualOnly)proofs.push('SEND_RESTORES_PREVIOUS_FOREGROUND');
  await wc.executeJavaScript('metisAssistant.voice({recording:true,level:.65,status:"Metis is listening"})');await pause(900);
  const edge=BrowserWindow.getAllWindows().find(item=>item!==win&&item.getBounds().x===display.bounds.x&&item.getBounds().y===display.bounds.y);
  assert.ok(edge,'Native badge exists');
@@ -86,10 +88,12 @@ async function main(){
  const first=await edge.webContents.executeJavaScript('document.querySelector(".wave").getAttribute("d")');await pause(400);
  assert.notEqual(first,await edge.webContents.executeJavaScript('document.querySelector(".wave").getAttribute("d")'));
  proofs.push('BADGE_AND_INPUT_SHARE_THEME_SURFACE_AND_WAVES_ANIMATE');
+ if(visualOnly){const inset=await edge.webContents.executeJavaScript('(()=>{const p=document.querySelector(".wave"),w=innerWidth,h=innerHeight,n=p.getTotalLength(),ys=[];for(let i=0;i<500;i++){const q=p.getPointAtLength(n*i/500);if(q.x>w*.25&&q.x<w*.75&&q.y<h*.25)ys.push(q.y);}return Math.max(...ys);})()');assert.ok(Number.isFinite(inset)&&inset>0&&inset<24,'Wave contour stays in the narrow outer band');proofs.push('SOFT_WAVE_CONTOUR_UNDER_24_CSS_PIXELS');}
  const sharp=require('sharp'),overlay=(await wc.capturePage()).toPNG(),edges=(await edge.webContents.capturePage()).toPNG();
  const meta=await sharp(overlay).metadata(),edgeMeta=await sharp(edges).metadata(),scale=edgeMeta.width/display.bounds.width;
  const cropped=await sharp(edges).extract({left:Math.round((display.workArea.x-display.bounds.x)*scale),top:Math.round((display.workArea.y-display.bounds.y)*scale),width:meta.width,height:meta.height}).png().toBuffer();
  await sharp({create:{width:meta.width,height:meta.height,channels:4,background:'#111820'}}).composite([{input:cropped},{input:overlay}]).png().toFile(path.join(output,'passive-overlay.png'));
+ if(visualOnly){console.log('SOFT_OVERLAY_PREVIEW_OK');finish();return;}
  await wc.executeJavaScript('metisAssistant.voice({recording:false,level:0})');
  assistant.focusInput();await until(()=>Number(getForeground())===hwnd,'focus for open-chat shortcut');
  await tap(0x76,0x41);await until(()=>openedChat==='fixture-chat','configured F7 opens exact chat');

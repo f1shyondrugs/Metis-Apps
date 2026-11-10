@@ -33,7 +33,7 @@ The desktop application icon uses the M outline in `../assets/metis-mark.svg`. R
 
 ## Build and test
 
-For a visible Windows focus regression, bundle the server’s `tests/desktop-assistant-native.browser.tsx` with its CSS/fonts, set `METIS_ASSISTANT_UI` to that asset directory, and run `electron tests/assistant-passive-windows.cjs`. It observes the real foreground HWND, checks native NoActivate/click-through flags, sends test keys only into its own window, and sends screenshot bytes only to loopback.
+For a visible Windows focus regression, bundle the server’s `tests/desktop-assistant-native.browser.tsx` with its CSS/fonts, set `METIS_ASSISTANT_UI` to that asset directory, and run `electron tests/assistant-passive-windows.cjs`. It observes the real foreground HWND, checks native NoActivate/click-through flags, sends test keys only into its own window, and sends screenshot bytes only to loopback. Set `METIS_OVERLAY_PREVIEW_ONLY=1` for a frame-only preview without key injection; it also checks the narrow wave contour.
 
 
 Use Node.js 22 or newer:
