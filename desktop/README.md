@@ -6,13 +6,15 @@ A single Electron app for Windows, macOS Apple Silicon and Linux x64. The app co
 
 The main window opens Metis. **Metis → Change server** selects your server; **Metis → Device settings** (Ctrl/Cmd+Shift+D) opens local device pairing, command history and settings. The tray offers both windows. Closing windows hides them while the connection remains available. **Quit** exits the app and disconnects the device.
 
-Signing into the website does not pair your computer. Pair separately in **Device settings** with the code from Metis Settings → Devices. Pairing does not sign into the website. Device permissions remain managed by the server and the operating system.
+Signing into the website does not pair your computer. Pair separately in **Device settings** with the code from Metis Settings → Devices. Pairing does not sign into the website. Device permissions remain managed by the server and the operating system. Microphone approval is remembered per server on this device and shared by the main web window and assistant, including after an app restart. Camera access is a separate approval; operating-system permissions still apply.
 
 ## Desktop Assistant
 
 Hold **Ctrl+Shift+Space** to record. Release before three seconds to finish, or keep holding for three seconds to lock; press the shortcut again or use Stop to finish a locked recording. Escape closes the assistant and cancels recording. The tray also offers **Open Desktop Assistant**. Global key listening requires Accessibility on macOS and X11 on Linux; the tray remains available when the hotkey is unavailable.
 
 With voice configured, the overlay stays passive: it does not activate or intercept mouse/keyboard input from your game. **Ctrl+Shift+Enter** enters text mode; press it again to return to the prior app. Without voice, the text field is focused automatically. **Ctrl+Shift+M** opens the same saved chat. Change Talk, Focus text, Open chat, local device settings and Dismiss/stop in **Settings → Remote Client → Keyboard shortcuts**. These preferences are local to this device and survive restarts.
+
+The assistant keeps a white wave-and-dot perimeter while open, including when it is not recording. Microphone volume strengthens the waves smoothly within the narrow outer band; reduced-motion settings keep the outline still.
 
 The compact **Ask Metis** field remains available without voice. Submitted user messages and replies appear at the top right and are the actual saved chat messages; the Open button opens that chat in Metis. It uses the signed-in account's **Voice & dictionary** configuration: batch Whisper inserts its completed transcript, and realtime transcription additionally shows live words. Review the text and press Enter or Send. Each send attaches fresh screenshots of **all connected monitors** (up to the existing ten-attachment limit), their names/bounds/scales and the paired device ID. Screen recording failures keep the draft and prevent a partial screen submission. Dismissing the window does not cancel an already submitted server job; **Open in Metis** provides the full chat controls.
 

@@ -6,10 +6,10 @@ function edgeHtml() {
   // One screen-space field: corners never stack two independently painted edges.
   return '<svg class="edge" aria-hidden="true" preserveAspectRatio="none"><defs>'+
     '<path class="perimeter"/>'+
-    '<pattern id="dots" width="8" height="8" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.3" fill="var(--primary)"/></pattern>'+
+    '<pattern id="dots" width="8" height="8" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.3" fill="var(--edge-color,var(--primary))"/></pattern>'+
     '<filter id="soft" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="4"/></filter>'+
     '<mask id="edge-mask" maskUnits="userSpaceOnUse" style="mask-type:luminance"><rect width="100%" height="100%" fill="white"/><path class="wave" filter="url(#soft)" fill="black"/></mask></defs>'+
-    '<g mask="url(#edge-mask)"><rect width="100%" height="100%" fill="var(--primary)" opacity=".28"/><rect class="dots" width="100%" height="100%" fill="url(#dots)" opacity=".95"/></g></svg>';
+    '<g mask="url(#edge-mask)"><rect width="100%" height="100%" fill="var(--edge-color,var(--primary))" opacity=".28"/><rect class="dots" width="100%" height="100%" fill="url(#dots)" opacity=".95"/></g></svg>';
 }
 
 function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape", mode = "computer") {
@@ -63,14 +63,14 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
   window.metisVoiceLevel = value => { voiceLevel=Math.max(0,Math.min(1,Number(value)||0)); };
   if (OVERLAY_VOICE_MODE) {
     document.querySelector(".label").textContent="Metis Assistant";
-    document.querySelector(".edge").style.visibility="hidden";
+    document.documentElement.style.setProperty("--edge-color","#ffffff");
   }
   window.metisVoiceState = (recording,label) => {
-    if(recording&&!voiceRecording)enteredAt=performance.now();
     voiceRecording=recording;
+    if(!recording)voiceLevel=0;
     document.querySelector(".label").textContent=label;
     document.querySelector(".notice").setAttribute("aria-label",label+". Press "+document.querySelector("kbd").textContent+" to cancel.");
-    document.querySelector(".edge").style.visibility=recording?"visible":"hidden";
+    // The assistant keeps its perimeter even when it is waiting for input.
   };
   let points=[], waves=6, frame, elapsed=0, previous=performance.now(), lastDraw=-Infinity;
   function resize() {
@@ -97,8 +97,8 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
     const progress=reduced.matches?1:1-Math.pow(1-Math.min(1,(performance.now()-enteredAt)/720),3);
     const moved=points.map(p=>{
       // Integer harmonics close seamlessly at the first/last sample.
-      const strength=1+smoothLevel*.25;
-      const displacement=(3*Math.sin(tau*waves*p.t-phase)+1.5*Math.sin(tau*(waves+3)*p.t+phase*.7))*strength+smoothLevel*2-(1-progress)*100;
+      const strength=1+smoothLevel;
+      const displacement=(3*Math.sin(tau*waves*p.t-phase)+1.5*Math.sin(tau*(waves+3)*p.t+phase*.7))*strength+smoothLevel*4-(1-progress)*100;
       return {x:p.x+p.nx*displacement,y:p.y+p.ny*displacement};
     });
     const pair=p=>p.x.toFixed(2)+" "+p.y.toFixed(2);
