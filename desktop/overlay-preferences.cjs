@@ -10,7 +10,7 @@ function createOverlayPreferences(file) {
     const saved = JSON.parse(fs.readFileSync(file, "utf8"));
     if (typeof saved?.hideOverlayFromCapture === "boolean") state.hideOverlayFromCapture = saved.hideOverlayFromCapture;
     try { state.cancelShortcut = shortcut.normalize(saved?.cancelShortcut); } catch { /* Migrate old or invalid settings to Escape. */ }
-    try { state.assistantShortcuts = assistantShortcuts.normalize(saved?.assistantShortcuts, state.cancelShortcut); } catch { state.assistantShortcuts=assistantShortcuts.normalize({},state.cancelShortcut); }
+    try { state.assistantShortcuts = assistantShortcuts.normalize(saved?.assistantShortcuts, state.cancelShortcut); } catch { state.assistantShortcuts=assistantShortcuts.migrateDefaults(state.cancelShortcut); }
   } catch (error) {
     if (error.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
   }

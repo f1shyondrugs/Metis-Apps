@@ -13,6 +13,11 @@ function normalize(input = {}, cancel = defaults.cancel) {
   if (new Set(Object.values(result)).size !== Object.keys(result).length) throw new Error('Each desktop shortcut must be different.');
   return result;
 }
+function migrateDefaults(cancel = defaults.cancel) {
+  const value={...defaults,cancel:shortcut.normalize(cancel)};
+  for(const key of Object.keys(defaults))if(key!=="cancel"&&value[key]===value.cancel)value[key]=value[key].replace("+Shift+","+Alt+");
+  return normalize(value);
+}
 function matches(binding, event, keys) {
   const parts = binding.split('+'), key = parts.pop();
   const names = {Up:'ArrowUp',Down:'ArrowDown',Left:'ArrowLeft',Right:'ArrowRight'};
@@ -31,4 +36,4 @@ function releases(binding, event, keys) {
     parts.includes('Alt') && [keys.Alt,keys.AltRight].includes(event.keycode) && !event.altKey ||
     parts.includes('Super') && [keys.Meta,keys.MetaRight].includes(event.keycode) && !event.metaKey;
 }
-module.exports = { defaults, normalize, matches, releases };
+module.exports = { defaults, normalize, migrateDefaults, matches, releases };

@@ -12,7 +12,9 @@ Signing into the website does not pair your computer. Pair separately in **Devic
 
 Hold **Ctrl+Shift+Space** to record. Release before three seconds to finish, or keep holding for three seconds to lock; press the shortcut again or use Stop to finish a locked recording. Escape closes the assistant and cancels recording. The tray also offers **Open Desktop Assistant**. Global key listening requires Accessibility on macOS and X11 on Linux; the tray remains available when the hotkey is unavailable.
 
-The floating text field remains available without voice. It uses the signed-in account's **Voice & dictionary** configuration: batch Whisper inserts its completed transcript, and realtime transcription additionally shows live words. Review the text and press Enter or Send. Each send attaches fresh screenshots of **all connected monitors** (up to the existing ten-attachment limit), their names/bounds/scales and the paired device ID. Screen recording failures keep the draft and prevent a partial screen submission. Dismissing the window does not cancel an already submitted server job; **Open in Metis** provides the full chat controls.
+With voice configured, the overlay stays passive: it does not activate or intercept mouse/keyboard input from your game. **Ctrl+Shift+Enter** enters text mode; press it again to return to the prior app. Without voice, the text field is focused automatically. **Ctrl+Shift+M** opens the same saved chat. Change Talk, Focus text, Open chat, local device settings and Dismiss/stop in **Settings → Remote Client → Keyboard shortcuts**. These preferences are local to this device and survive restarts.
+
+The compact **Ask Metis** field remains available without voice. Submitted user messages and replies appear at the top right and are the actual saved chat messages; the Open button opens that chat in Metis. It uses the signed-in account's **Voice & dictionary** configuration: batch Whisper inserts its completed transcript, and realtime transcription additionally shows live words. Review the text and press Enter or Send. Each send attaches fresh screenshots of **all connected monitors** (up to the existing ten-attachment limit), their names/bounds/scales and the paired device ID. Screen recording failures keep the draft and prevent a partial screen submission. Dismissing the window does not cancel an already submitted server job; **Open in Metis** provides the full chat controls.
 
 Inside the desktop app, **Settings → Remote Client** shows the local connection, app version, assistant shortcut and **Open Remote Client Device Settings**. The extra category is hidden in normal browsers. Website sign-in and device pairing remain separate; pair this computer and sign in to use the assistant. The server must include the desktop-assistant page.
 
@@ -30,6 +32,9 @@ Inside the desktop app, **Settings → Remote Client** shows the local connectio
 The desktop application icon uses the M outline in `../assets/metis-mark.svg`. Run `npm run generate:icons` to produce its PNG and Windows ICO. CI regenerates these icons before packaging. The local device window, server-selection view and tray retain the original hands branding from `assets/brand.png`.
 
 ## Build and test
+
+For a visible Windows focus regression, bundle the server’s `tests/desktop-assistant-native.browser.tsx` with its CSS/fonts, set `METIS_ASSISTANT_UI` to that asset directory, and run `electron tests/assistant-passive-windows.cjs`. It observes the real foreground HWND, checks native NoActivate/click-through flags, sends test keys only into its own window, and sends screenshot bytes only to loopback.
+
 
 Use Node.js 22 or newer:
 

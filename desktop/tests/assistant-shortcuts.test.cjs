@@ -18,6 +18,7 @@ test('aliases normalize and collisions or unknown keys cannot be saved',()=>{
   assert.throws(()=>shortcuts.normalize({assistant:'Control+NotAKey'}));
   assert.throws(()=>shortcuts.normalize([]));
 });
+test('migration preserves an existing cancellation key that collides with a new default',()=>{const value=shortcuts.migrateDefaults('Control+Shift+Space');assert.equal(value.cancel,'Control+Shift+Space');assert.equal(value.assistant,'Control+Alt+Space');assert.equal(new Set(Object.values(value)).size,5);});
 test('old capture preferences migrate without losing the configured cancel key',()=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'metis-shortcuts-'));
   try{const file=path.join(dir,'preferences.json');fs.writeFileSync(file,JSON.stringify({hideOverlayFromCapture:false,cancelShortcut:'Control+Alt+X'}));
