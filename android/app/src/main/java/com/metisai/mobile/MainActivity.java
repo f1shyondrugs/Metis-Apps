@@ -281,17 +281,22 @@ public final class MainActivity extends Activity {
         if ("Metis".equals(title)) {
             LinearLayout brand = new LinearLayout(this);
             brand.setGravity(Gravity.CENTER_VERTICAL);
-            ImageView mark = new ImageView(this);
-            mark.setImageResource(R.drawable.ic_metis);
-            mark.setContentDescription("Metis");
-            mark.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            brand.addView(mark, new LinearLayout.LayoutParams(dp(32), dp(32)));
+            ImageView leftHand = new ImageView(this);
+            leftHand.setImageResource(R.drawable.hand_left);
+            leftHand.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            brand.addView(leftHand, new LinearLayout.LayoutParams(dp(26), dp(22)));
             TextView heading = label("Μῆτις", 19, FG);
             heading.setTypeface(Typeface.create("serif", Typeface.ITALIC));
             heading.setLetterSpacing(-0.025f);
             LinearLayout.LayoutParams brandText = new LinearLayout.LayoutParams(-2, dp(52));
             brandText.leftMargin = dp(3);
             brand.addView(heading, brandText);
+            ImageView rightHand = new ImageView(this);
+            rightHand.setImageResource(R.drawable.hand_right);
+            rightHand.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            LinearLayout.LayoutParams rightHandParams = new LinearLayout.LayoutParams(dp(26), dp(22));
+            rightHandParams.leftMargin = dp(3);
+            brand.addView(rightHand, rightHandParams);
             bar.addView(brand, new LinearLayout.LayoutParams(0, dp(56), 1));
         } else {
             TextView heading = label(title, 19, FG);
@@ -534,11 +539,14 @@ public final class MainActivity extends Activity {
         int width = Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(44));
         overlay.addView(panel, new FrameLayout.LayoutParams(width, -1, Gravity.LEFT));
         FrameLayout brand = new FrameLayout(this);
-        ImageView mark = new ImageView(this);
-        mark.setImageResource(R.drawable.ic_metis);
-        mark.setContentDescription("Metis");
-        mark.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        brand.addView(mark, new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER));
+        brand.addView(wordmark(), new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+        for (boolean left : new boolean[]{true, false}) {
+            ImageView hand = new ImageView(this);
+            hand.setImageResource(left ? R.drawable.hand_left : R.drawable.hand_right);
+            hand.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            brand.addView(hand, new FrameLayout.LayoutParams(dp(80), dp(36),
+                (left ? Gravity.LEFT : Gravity.RIGHT) | Gravity.CENTER_VERTICAL));
+        }
         LinearLayout.LayoutParams brandParams = new LinearLayout.LayoutParams(-1, dp(58));
         brandParams.topMargin = dp(16);
         panel.addView(brand, brandParams);

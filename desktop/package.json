@@ -1,6 +1,6 @@
 {
   "name": "metis-ai-remote-client",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "private": true,
   "description": "Metis desktop app with integrated device connection",
   "main": "main.cjs",
@@ -59,7 +59,7 @@
       "libmetisdesktop.dylib",
       "assets/icon.ico",
       "assets/icon.png",
-      "assets/trayTemplate.png",
+      "assets/brand.png",
       "assets/lucide-LICENSE.txt",
       "node_modules/**/*",
       "package.json",

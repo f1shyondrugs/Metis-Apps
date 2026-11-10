@@ -12,5 +12,4 @@ await fs.mkdir(path.join(root, "assets"), { recursive: true });
 const pngPath = path.join(root, "assets/icon.png");
 await sharp(Buffer.from(icon)).png().toFile(pngPath);
 await fs.writeFile(path.join(root, "assets/icon.ico"), await pngToIco(pngPath));
-await sharp(Buffer.from(source.replace('fill="currentColor"', 'fill="#000000"'))).resize(64, 64).png().toFile(path.join(root, "assets/trayTemplate.png"));
 console.log("METIS_M_ICONS_GENERATED");
