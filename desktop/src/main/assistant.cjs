@@ -4,13 +4,21 @@ const { sameOrigin, normalizeServer } = require('../../policy.cjs');
 const { registerWebPermissions } = require('./web-permissions.cjs');
 const { createComputerUseOverlay } = require('../../computer-use-overlay.cjs');
 const { createHoldGesture } = require('./assistant-hold.cjs');
+const shortcuts = require('../../assistant-shortcuts.cjs');
+const { createForegroundRestore } = require('./assistant-focus.cjs');
 
-function createAssistant({ getServer, getDevice, onOpenChat, computerOverlay, appearance, hook, captureSources = options => desktopCapturer.getSources(options) }) {
+function createAssistant({
+  getServer, getDevice, onOpenChat, onDevices = () => {}, computerOverlay, appearance, hook,
+  getShortcuts = () => shortcuts.defaults, foreground = createForegroundRestore(),
+  captureSources = options => desktopCapturer.getSources(options)
+}) {
   let win, server, opening, ready = false, visible = false, recording = false, capturing = false;
-  let pending = [], hookStarted = false, error = '';
-  const channel = 'assistant:gesture';
-  const edges = createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, mode: 'voice', hideFromCapture: true, onCancel: () => close() });
-  edges.setAppearance(appearance);
+  let pending = [], hookStarted = false, error = '', editing = false, autoFocusPending = false, currentChat = null;
+  let currentAppearance = appearance, shortcutsPaused = false, shortcutCaptureTimer;
+  const channel = 'assistant:gesture', held = new Set();
+  const bindings = () => shortcuts.normalize(getShortcuts());
+  const edges = createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, mode: 'voice', hideFromCapture: true, cancelShortcut: bindings().cancel, onCancel: () => close() });
+  edges.setAppearance(currentAppearance);
   const gesture = createHoldGesture(value => {
     if (value === 'start') void open('start').catch(reportError);
     else send(value);
@@ -26,25 +34,46 @@ function createAssistant({ getServer, getDevice, onOpenChat, computerOverlay, ap
         event.senderFrame !== win.webContents.mainFrame || !sameOrigin(event.senderFrame.url, server) ||
         new URL(event.senderFrame.url).pathname !== '/desktop-assistant') throw new Error('Access denied.');
   }
+  function focusInput() {
+    if (!visible || !win || win.isDestroyed()) return;
+    if (!editing) foreground.remember();
+    editing = true;
+    win.setFocusable(true);
+    win.setIgnoreMouseEvents(false);
+    win.show(); win.focus(); win.webContents.focus();
+    send('focus-input');
+  }
+  function releaseInput(restore = Boolean(win && !win.isDestroyed() && win.isFocused())) {
+    editing = false;
+    if (win && !win.isDestroyed()) {
+      win.setIgnoreMouseEvents(true);
+      win.setFocusable(false);
+      if (visible) win.showInactive();
+    }
+    if (restore) foreground.restore();
+    send('passive');
+  }
+  function bounds() {
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    return display.workArea;
+  }
   async function open(initialGesture) {
     if (opening) return opening;
     const next = normalizeServer(getServer());
-    if (win && !win.isDestroyed() && next !== server) { win.destroy(); win = null; }
+    if (win && !win.isDestroyed() && next !== server) { close(); win.destroy(); win = null; }
     const created = !win || win.isDestroyed();
+    autoFocusPending = true;
     if (created) {
       server = next; ready = false; pending = [];
-      const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-      const width = Math.min(640, display.workArea.width - 32);
       win = new BrowserWindow({
-        x: Math.round(display.workArea.x + (display.workArea.width-width)/2),
-        y: display.workArea.y + display.workArea.height - Math.min(620,display.workArea.height-40) - 20,
-        width, height: Math.min(620,display.workArea.height-40),
-        transparent: true, backgroundColor: '#00000000', frame: false, show: false,
-        resizable: false, skipTaskbar: true, hasShadow: false, title: 'Metis Assistant',
-        webPreferences: { partition: 'persist:metis-web', preload: path.join(__dirname,'assistant-preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false }
+        ...bounds(), transparent: true, backgroundColor: '#00000000', frame: false, show: false,
+        focusable: false, resizable: false, skipTaskbar: true, hasShadow: false, title: 'Metis Assistant',
+        webPreferences: { partition: 'persist:metis-web', preload: path.join(__dirname,'assistant-preload.cjs'),
+          sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false }
       });
       win.setAlwaysOnTop(true, 'pop-up-menu');
       win.setContentProtection(true);
+      win.setIgnoreMouseEvents(true);
       registerWebPermissions(win.webContents, server, win);
       win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
       const navigation = (event, url) => {
@@ -53,96 +82,126 @@ function createAssistant({ getServer, getDevice, onOpenChat, computerOverlay, ap
       win.webContents.on('will-navigate', navigation);
       win.webContents.on('will-redirect', navigation);
       win.on('close', event => { event.preventDefault(); close(); });
-      win.webContents.on('render-process-gone', () => { close(); ready=false; });
+      win.on('blur', () => { if (editing && !capturing) releaseInput(false); });
+      win.webContents.on('render-process-gone', () => { close(); ready = false; });
       if (initialGesture) pending.push(initialGesture);
-      opening = win.loadURL(new URL('/desktop-assistant',server).href).finally(() => { opening=null; });
+      opening = win.loadURL(new URL('/desktop-assistant',server).href).finally(() => { opening = null; });
       await opening;
-    }
-    if (!created && initialGesture) send(initialGesture);
+    } else if (!visible) win.setBounds(bounds());
     visible = true;
-    edges.touch();
-    win.show(); win.focus();
-    // Every invocation gets a fresh motion entrance, but preserves unsent text.
+    // showInactive never takes foreground away from a game.
+    win.showInactive(); edges.touch();
+    if (!created && initialGesture) send(initialGesture);
     send('open');
   }
   function close() {
-    visible = false; recording=false; pending=[];
+    const restore = Boolean(editing && win && !win.isDestroyed() && win.isFocused());
+    visible = false; recording = false; autoFocusPending = false; pending = [];
     gesture.cancel(); edges.hide(); send('cancel');
     if (win && !win.isDestroyed()) win.hide();
+    releaseInput(restore);
   }
   async function capture() {
     if (capturing) throw new Error('Screen capture is already in progress.');
-    capturing=true;
+    capturing = true;
     const wasVisible = visible;
     try {
       if (!getDevice().clientId) throw new Error('Pair this device before sending screen context.');
-      const displays=screen.getAllDisplays();
-      if (!displays.length || displays.length>10) throw new Error('Screen context supports 1–10 connected monitors.');
+      const displays = screen.getAllDisplays();
+      if (!displays.length || displays.length > 10) throw new Error('Screen context supports 1–10 connected monitors.');
       win.hide(); edges.suspendCapture(); computerOverlay?.suspendCapture();
-      await new Promise(resolve=>setTimeout(resolve,180));
-      const sources=await captureSources({ types:['screen'], thumbnailSize:{width:1920,height:1080}, fetchWindowIcons:false });
-      const monitors=displays.map(display=>{
-        const source=sources.find(source=>source.display_id===String(display.id));
-        if(!source || source.thumbnail.isEmpty()) throw new Error('Could not capture every monitor. Check screen recording permissions and retry.');
-        return { id:String(display.id), name:display.label || source.name, primary:display.id===screen.getPrimaryDisplay().id,
+      await new Promise(resolve => setTimeout(resolve,180));
+      const sources = await captureSources({ types:['screen'], thumbnailSize:{width:1920,height:1080}, fetchWindowIcons:false });
+      const monitors = displays.map(display => {
+        const source = sources.find(source => source.display_id === String(display.id));
+        if (!source || source.thumbnail.isEmpty()) throw new Error('Could not capture every monitor. Check screen recording permissions and retry.');
+        return { id:String(display.id), name:display.label || source.name, primary:display.id === screen.getPrimaryDisplay().id,
           bounds:display.bounds, scaleFactor:display.scaleFactor, image:source.thumbnail.toDataURL() };
       });
       return { device:getDevice(), capturedAt:new Date().toISOString(), monitors };
     } finally {
-      capturing=false; edges.resumeCapture(); computerOverlay?.resumeCapture();
-      if(wasVisible && visible && win && !win.isDestroyed()) win.show();
+      capturing = false; edges.resumeCapture(); computerOverlay?.resumeCapture();
+      if (wasVisible && visible && win && !win.isDestroyed()) {
+        if (editing) { win.show(); win.focus(); } else win.showInactive();
+      }
     }
   }
+  function validChat(id) {
+    if (id !== null && (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(id))) throw new Error('Invalid chat.');
+    return id;
+  }
+  function openChat() { const id = currentChat; close(); return onOpenChat(id); }
   const handlers = {
-    'assistant:ready': event => { assertSender(event); ready=true; const queue=pending; pending=[]; return { gestures:queue, device:getDevice() }; },
-    'assistant:resize': (event,height) => {
-      assertSender(event);
-      if(typeof height!=='number'||!Number.isFinite(height))return;
-      const display=screen.getDisplayMatching(win.getBounds());
-      const size=Math.min(Math.max(160,Math.ceil(height)),display.workArea.height-40);
-      const bounds=win.getBounds();
-      win.setBounds({x:bounds.x,y:display.workArea.y+display.workArea.height-size-20,width:bounds.width,height:size});
+    'assistant:ready': event => {
+      assertSender(event); ready = true;
+      const queue = pending; pending = [];
+      return { gestures:queue, device:getDevice(), shortcuts:bindings(), editing };
     },
-    'assistant:capture': event => { assertSender(event); if(!visible)throw new Error('Open the assistant before capturing.'); return capture(); },
+    // Retain compatibility with the earlier renderer; layout now fills its display.
+    'assistant:resize': event => { assertSender(event); },
+    'assistant:configure': (event,value) => {
+      assertSender(event);
+      if (!value || typeof value.voiceConfigured !== 'boolean') throw new Error('Invalid assistant mode.');
+      if (Object.hasOwn(value,'chatId')) currentChat = validChat(value.chatId);
+      if (autoFocusPending && visible) {
+        autoFocusPending = false;
+        if (!value.voiceConfigured) focusInput();
+        else releaseInput(false);
+      }
+      return { editing, shortcuts:bindings() };
+    },
+    'assistant:focus': (event,value) => {
+      assertSender(event);
+      if (typeof value !== 'boolean') throw new Error('Invalid input mode.');
+      autoFocusPending = false;
+      if (value) focusInput(); else releaseInput();
+    },
+    'assistant:capture': event => { assertSender(event); if (!visible) throw new Error('Open the assistant before capturing.'); return capture(); },
     'assistant:close': event => { assertSender(event); close(); },
-    'assistant:open-chat': (event,id) => { assertSender(event); if(id !== null && (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(id)))throw new Error('Invalid chat.'); close(); return onOpenChat(id); }
+    'assistant:open-chat': (event,id) => { assertSender(event); currentChat = validChat(id); return openChat(); }
   };
-  for(const [key,value] of Object.entries(handlers)) ipcMain.handle(key,value);
+  for (const [key,value] of Object.entries(handlers)) ipcMain.handle(key,value);
   const voiceListener = (event,value) => {
     try {
       assertSender(event);
-      if(!visible || !value || typeof value.recording!=='boolean' || typeof value.level!=='number' || !Number.isFinite(value.level))return;
-      if(value.recording!==recording) {
-        recording=value.recording;
-        if(!recording)gesture.finish();
-      }
-      const allowed=["Metis Assistant","Metis is listening","Voice is not configured","Metis is working"];
-      edges.setVoiceState(recording,recording?"Metis is listening":allowed.includes(value.status)?value.status:"Metis Assistant");
-      if(recording)edges.setVoiceLevel(value.level);
-    } catch { /* Untrusted or stale renderer. */ }
+      if (!visible || !value || typeof value.recording !== 'boolean' || typeof value.level !== 'number' || !Number.isFinite(value.level)) return;
+      if (value.recording !== recording) { recording = value.recording; if (!recording) gesture.finish(); }
+      const allowed = ['Metis Assistant','Metis is listening','Voice is not configured','Metis is working'];
+      edges.setVoiceState(recording,recording ? 'Metis is listening' : allowed.includes(value.status) ? value.status : 'Metis Assistant');
+      if (recording) edges.setVoiceLevel(value.level);
+    } catch { /* Ignore stale or untrusted renderers. */ }
   };
   ipcMain.on('assistant:voice',voiceListener);
   function startHook() {
     try {
-      if(process.platform==='linux' && !process.env.DISPLAY) throw new Error('Global assistant hotkey requires an X11 desktop.');
-      const {uIOhook,UiohookKey:keys}=hook || require('uiohook-napi');
-      const down=event=>{
-        if(event.keycode===keys.Space && event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey) gesture.down();
-        if(event.keycode===keys.Escape && visible)close();
+      if (process.platform === 'linux' && !process.env.DISPLAY) throw new Error('Global assistant hotkey requires an X11 desktop.');
+      const {uIOhook,UiohookKey:keys} = hook || require('uiohook-napi');
+      const down = event => {
+        if (shortcutsPaused) return;
+        const repeat = held.has(event.keycode); held.add(event.keycode);
+        const map = bindings();
+        if (shortcuts.matches(map.assistant,event,keys)) gesture.down();
+        else if (!repeat && shortcuts.matches(map.focusInput,event,keys)) {
+          if (!visible) void open().then(focusInput).catch(reportError);
+          else if (editing) releaseInput(); else focusInput();
+        } else if (!repeat && shortcuts.matches(map.openChat,event,keys) && visible) void openChat().catch(reportError);
+        else if (!repeat && shortcuts.matches(map.deviceSettings,event,keys)) onDevices();
+        else if (!repeat && shortcuts.matches(map.cancel,event,keys) && visible) close();
       };
-      const up=event=>{ if([keys.Space,keys.Ctrl,keys.CtrlRight,keys.Shift,keys.ShiftRight].includes(event.keycode))gesture.up(); };
-      // A shared native key listener also works when another app has registered
-      // the accelerator. Do not disable hold-to-talk on that computer.
-      try {uIOhook.on('keydown',down);uIOhook.on('keyup',up);uIOhook.start();hookStarted=true;}
-      catch(cause){uIOhook.removeListener('keydown',down);uIOhook.removeListener('keyup',up);throw cause;}
-      return ()=>{uIOhook.removeListener('keydown',down);uIOhook.removeListener('keyup',up);uIOhook.stop();};
-    } catch(cause) {error=cause.message;return ()=>{};}
+      const up = event => { held.delete(event.keycode); if (shortcuts.releases(bindings().assistant,event,keys)) gesture.up(); };
+      try { uIOhook.on('keydown',down); uIOhook.on('keyup',up); uIOhook.start(); hookStarted = true; }
+      catch (cause) { uIOhook.removeListener('keydown',down); uIOhook.removeListener('keyup',up); throw cause; }
+      return () => { uIOhook.removeListener('keydown',down); uIOhook.removeListener('keyup',up); uIOhook.stop(); };
+    } catch (cause) { error = cause.message; return () => {}; }
   }
-  const stopHook=startHook();
+  const stopHook = startHook();
   return {
-    open, close, capture, getWindow:()=>win, gesture,
-    state:()=>({hotkey:'Ctrl+Shift+Space',hotkeyAvailable:hookStarted,error}),
-    destroy(){close();stopHook();for(const key of Object.keys(handlers))ipcMain.removeHandler(key);ipcMain.removeListener('assistant:voice',voiceListener);win?.destroy();},
+    open, close, capture, focusInput, releaseInput, getWindow:() => win, gesture,
+    setAppearance(value) { currentAppearance = value; edges.setAppearance(value); },
+    shortcutsChanged() { gesture.cancel(); held.clear(); edges.setCancelShortcut(bindings().cancel); send('stop'); send('shortcuts-changed'); },
+    pauseShortcuts(value) { clearTimeout(shortcutCaptureTimer); shortcutsPaused=Boolean(value); gesture.cancel(); held.clear(); if(shortcutsPaused)send('stop'); if(shortcutsPaused){shortcutCaptureTimer=setTimeout(()=>{shortcutsPaused=false;},30000);shortcutCaptureTimer.unref?.();} },
+    state:() => ({ hotkey:bindings().assistant, shortcuts:bindings(), defaults:shortcuts.defaults, hotkeyAvailable:hookStarted, error, editing }),
+    destroy() { close(); clearTimeout(shortcutCaptureTimer); stopHook(); for (const key of Object.keys(handlers)) ipcMain.removeHandler(key); ipcMain.removeListener('assistant:voice',voiceListener); win?.destroy(); }
   };
 }
-module.exports={createAssistant};
+module.exports = { createAssistant };

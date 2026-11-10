@@ -4,5 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 if (process.isMainFrame) contextBridge.exposeInMainWorld('metisApp', Object.freeze({
   openDeviceSettings: () => ipcRenderer.invoke('desktop:open-device-settings'),
   deviceState: () => ipcRenderer.invoke('desktop:device-state'),
+  setShortcuts: value => ipcRenderer.invoke('desktop:shortcuts', value),
+  setShortcutCapture: value => ipcRenderer.invoke('desktop:shortcut-capture', value),
   openAssistant: () => ipcRenderer.invoke('desktop:assistant'),
 }));

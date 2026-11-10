@@ -24,11 +24,11 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
 <style>
   :root { --primary: #d4d4d4; --background: #141414; --foreground: #f4f4f5; --muted-foreground: #b0b0b0; --border: #353535; }
   html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; pointer-events: none; animation: overlay-enter 700ms ease-out both; }
+  body { font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif); pointer-events: none; animation: overlay-enter 700ms ease-out both; }
   .edge { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 3; overflow: hidden; pointer-events: none; }
   @keyframes overlay-enter { from { opacity: 0; } to { opacity: 1; } }
   @keyframes notice-enter { from { opacity: 0; transform: translate(-50%,calc(-100% - 24px)); } to { opacity: 1; transform: translate(-50%,0); } }
-  .notice { position: fixed; z-index: 4; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 9px 13px; border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--background) 94%, transparent); color: var(--foreground); box-shadow: 0 4px 16px #0003; font-size: 12px; line-height: 18px; white-space: nowrap; animation: notice-enter 800ms cubic-bezier(.2,.7,.2,1) both; }
+  .notice { position: fixed; z-index: 4; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 9px 13px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--background) 94%, transparent); color: var(--foreground); box-shadow: 0 4px 16px #0003; font-size: 12px; line-height: 18px; white-space: nowrap; animation: notice-enter 800ms cubic-bezier(.2,.7,.2,1) both; }
   .label { font-weight: 600; overflow-wrap: anywhere; }
   .cancel { max-width: 55%; min-width: 0; display: flex; align-items: center; gap: 5px; padding-left: 12px; border-left: 1px solid var(--border); color: var(--muted-foreground); }
   kbd { min-width: 0; font: inherit; font-size: 10px; font-weight: 600; line-height: 18px; padding: 0 4px; border: 1px solid var(--border); border-radius: 4px; color: var(--foreground); white-space: normal; overflow-wrap: anywhere; }
@@ -49,7 +49,7 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
   window.metisAppearance(OVERLAY_THEME_JSON);
   window.metisCancelShortcut = label => {
     document.querySelector("kbd").textContent = label;
-    document.querySelector(".notice").setAttribute("aria-label", "Metis is using your computer. Press "+label+" to cancel.");
+    document.querySelector(".notice").setAttribute("aria-label", document.querySelector(".label").textContent+". Press "+label+" to cancel.");
   };
   const cursor = document.querySelector(".cursor");
   window.metisCursor = (x,y,visible) => { cursor.style.left=x+"px"; cursor.style.top=y+"px"; cursor.classList.toggle("visible",visible); };
@@ -59,7 +59,7 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
   const perimeter=svg.querySelector(".perimeter"), pattern=svg.querySelector("pattern");
   const dot=pattern.querySelector("circle"), dots=svg.querySelector(".dots");
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-  let enteredAt=performance.now(), voiceLevel=0, voiceRecording=false;
+  let enteredAt=performance.now(), voiceLevel=0, smoothLevel=0, voiceRecording=false;
   window.metisVoiceLevel = value => { voiceLevel=Math.max(0,Math.min(1,Number(value)||0)); };
   if (OVERLAY_VOICE_MODE) {
     document.querySelector(".label").textContent="Metis Assistant";
@@ -69,6 +69,7 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
     if(recording&&!voiceRecording)enteredAt=performance.now();
     voiceRecording=recording;
     document.querySelector(".label").textContent=label;
+    document.querySelector(".notice").setAttribute("aria-label",label+". Press "+document.querySelector("kbd").textContent+" to cancel.");
     document.querySelector(".edge").style.visibility=recording?"visible":"hidden";
   };
   let points=[], waves=6, frame, elapsed=0, previous=performance.now(), lastDraw=-Infinity;
@@ -91,12 +92,13 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
     draw();
   }
   function draw() {
-    const phase=elapsed/4200, tau=2*Math.PI;
+    const phase=elapsed/1200, tau=2*Math.PI;
+    smoothLevel += (voiceLevel-smoothLevel)*.16;
     const progress=reduced.matches?1:1-Math.pow(1-Math.min(1,(performance.now()-enteredAt)/720),3);
     const moved=points.map(p=>{
       // Integer harmonics close seamlessly at the first/last sample.
-      const strength=1+voiceLevel*3.5;
-      const displacement=(8*Math.sin(tau*waves*p.t-phase)+4*Math.sin(tau*(waves+3)*p.t+phase*.7))*strength+voiceLevel*52-(1-progress)*90;
+      const strength=1+smoothLevel*2.7;
+      const displacement=(12*Math.sin(tau*waves*p.t-phase)+6*Math.sin(tau*(waves+3)*p.t+phase*.7))*strength+smoothLevel*48-(1-progress)*100;
       return {x:p.x+p.nx*displacement,y:p.y+p.ny*displacement};
     });
     const pair=p=>p.x.toFixed(2)+" "+p.y.toFixed(2);
@@ -105,9 +107,9 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
     for(let i=0;i<moved.length;i++)d+="Q"+pair(moved[i])+" "+pair(mid(moved[i],moved[(i+1)%moved.length]));
     path.setAttribute("d",d+"Z");
     // Drift one whole cell per cycle: wrap is invisible and circles never stretch.
-    pattern.setAttribute("patternTransform","translate("+((elapsed/4000)%8).toFixed(3)+" "+((elapsed/6000)%8).toFixed(3)+")");
-    dot.setAttribute("r",(1.3+.22*Math.sin(elapsed/1800)).toFixed(3));
-    dots.setAttribute("opacity",(.84+.14*Math.sin(elapsed/2400)).toFixed(3));
+    pattern.setAttribute("patternTransform","translate("+((elapsed/850)%8).toFixed(3)+" "+((elapsed/1100)%8).toFixed(3)+")");
+    dot.setAttribute("r",(1.35+.26*Math.sin(elapsed/650)).toFixed(3));
+    dots.setAttribute("opacity",(.87+.11*Math.sin(elapsed/750)).toFixed(3));
   }
   function tick(now) {
     elapsed+=Math.min(now-previous,100); previous=now;
@@ -348,6 +350,7 @@ function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCan
 
   function setCancelShortcut(value, persist = () => {}) {
     const next = shortcut.normalize(value);
+    if (mode === "voice") { persist(next); cancelShortcut=next; renderShortcut(); return next; }
     if (next === cancelShortcut) { persist(next); return next; }
     // Reserve the new combination before releasing the existing safety shortcut.
     if (!registerShortcut(next)) throw Error("This shortcut is already in use or unavailable. Choose another.");

@@ -9,7 +9,7 @@ const { registerWebPermissions } = require('./web-permissions.cjs');
 const shellPath = path.join(ROOT, 'ui', 'index.html');
 const shellUrl = pathToFileURL(shellPath).href;
 
-async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}), onAssistant = () => {}, shouldHide = () => false, initialServer } = {}) {
+async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}), onAssistant = () => {}, onShortcutsChange = () => {}, onShortcutCapture = () => {}, shouldHide = () => false, initialServer } = {}) {
   const configPath = path.join(app.getPath('userData'), 'server.json');
   let server = initialServer ? normalizeServer(initialServer) : DEFAULT_SERVER;
   try { server = normalizeServer(JSON.parse(fs.readFileSync(configPath, 'utf8')).url); } catch {}
@@ -27,6 +27,7 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
     if (!win.isDestroyed()) win.webContents.send('desktop:state-changed', state);
   };
   const disposeView = () => {
+    onShortcutCapture(false);
     generation++;
     if (!view) return;
     if (!win.isDestroyed()) win.contentView.removeChildView(view);
@@ -108,6 +109,18 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
           !sameOrigin(event.senderFrame.url, server)) throw new Error('Access denied.');
       return onDeviceState();
     },
+    'desktop:shortcut-capture': (event,value) => {
+      const contents = view?.webContents;
+      if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
+          !sameOrigin(event.senderFrame.url, server) || typeof value !== 'boolean') throw new Error('Access denied.');
+      return onShortcutCapture(value);
+    },
+    'desktop:shortcuts': (event,value) => {
+      const contents = view?.webContents;
+      if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
+          !sameOrigin(event.senderFrame.url, server)) throw new Error('Access denied.');
+      return onShortcutsChange(value);
+    },
     'desktop:assistant': event => {
       const contents = view?.webContents;
       if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
@@ -136,7 +149,7 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { label: 'Metis', submenu: [
       { label: 'Home', accelerator: 'CmdOrCtrl+Home', click: () => { void load(); } },
-      { label: 'Open Remote Client Device Settings', accelerator: 'CmdOrCtrl+Shift+D', click: onDevices },
+      { id: 'metis-device-settings', label: 'Open Remote Client Device Settings', accelerator: onDeviceState().assistant?.shortcuts?.deviceSettings || 'CmdOrCtrl+Shift+D', registerAccelerator: !onDeviceState().assistant?.hotkeyAvailable, click: onDevices },
       { label: 'Change server…', accelerator: 'CmdOrCtrl+,', click: settings },
       { label: 'Open in browser', click: () => openExternal(server) },
       { type: 'separator' },

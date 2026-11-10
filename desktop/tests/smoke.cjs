@@ -37,7 +37,7 @@ async function main() {
   assert.equal(await wc.executeJavaScript('document.getElementById("app").textContent'), 'Metis test server');
   assert.deepEqual(await wc.executeJavaScript('[typeof require, typeof process, typeof metisDesktop]'), ['undefined', 'undefined', 'undefined']);
   console.log('REMOTE_RENDER_AND_ISOLATION_OK');
-  assert.deepEqual(await wc.executeJavaScript('Object.keys(metisApp)'), ['openDeviceSettings','deviceState','openAssistant']);
+  assert.deepEqual(await wc.executeJavaScript('Object.keys(metisApp)'), ['openDeviceSettings','deviceState','setShortcuts','setShortcutCapture','openAssistant']);
   assert.equal(await wc.executeJavaScript('typeof document.getElementById("child").contentWindow.metisApp'), 'undefined');
   await wc.executeJavaScript('metisApp.openDeviceSettings()');
   assert.equal(openedDevices, 1);

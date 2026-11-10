@@ -27,6 +27,21 @@ async function main(){
  assert.equal((await wc.session.cookies.get({url:server}))[0].value,'session');
  const events=await wc.executeJavaScript('events');assert.equal(events.filter(value=>value==='start').length,1);assert.ok(events.indexOf('start')<events.indexOf('stop'));
  console.log('ASSISTANT_SANDBOX_SESSION_AND_RELEASE_DURING_LOAD_OK');
+ assert.equal(win.isFocusable(),false);
+ await wc.executeJavaScript('metisAssistant.configure({voiceConfigured:true,chatId:"fixture-chat"})');
+ assert.equal(win.isFocusable(),false);
+ await wc.executeJavaScript('metisAssistant.focusInput(true)');
+ assert.equal(win.isFocusable(),true);
+ await wc.executeJavaScript('metisAssistant.focusInput(false)');
+ assert.equal(win.isFocusable(),false);
+ await wc.executeJavaScript('metisAssistant.configure({voiceConfigured:false,chatId:"fixture-chat"})');
+ // Explicit focus changes are not overridden by later settings refreshes.
+ assert.equal(win.isFocusable(),false);
+ console.log('ASSISTANT_PASSIVE_AND_EXPLICIT_INPUT_MODE_OK');
+ assistant.close(); await assistant.open();
+ await wc.executeJavaScript('metisAssistant.configure({voiceConfigured:false,chatId:"fixture-chat"})');
+ assert.equal(win.isFocusable(),true);
+ console.log('ASSISTANT_WITHOUT_VOICE_AUTOFOCUSES_OK');
  const context=await wc.executeJavaScript('metisAssistant.capture()');
  assert.equal(context.device.clientId,'fixture');
  assert.equal(context.monitors.length,screen.getAllDisplays().length);
@@ -35,6 +50,8 @@ async function main(){
  console.log('ASSISTANT_ALL_MONITORS_AND_CAPTURE_RESTORE_OK');
  await wc.loadURL(server+'/foreign-path');
  await assert.rejects(wc.executeJavaScript('metisAssistant.capture()'),/Access denied/);
+ await assert.rejects(wc.executeJavaScript('metisAssistant.focusInput(true)'),/Access denied/);
+ await assert.rejects(wc.executeJavaScript('metisAssistant.configure({voiceConfigured:false,chatId:null})'),/Access denied/);
  const foreign=new BrowserWindow({show:false,webPreferences:{preload:path.join(__dirname,'../src/main/assistant-preload.cjs'),sandbox:true,contextIsolation:true}});
  await foreign.loadURL(server+'/desktop-assistant');
  await assert.rejects(foreign.webContents.executeJavaScript('metisAssistant.capture()'),/Access denied/);foreign.destroy();

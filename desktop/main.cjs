@@ -22,7 +22,7 @@ let desktopOpening;
 let assistant;
 async function showDesktop() {
   if (!desktop || desktop.win.isDestroyed()) {
-    desktopOpening ||= createDesktop({ initialServer: config?.server, onDevices: showWindow, onDeviceState: publicState, onAssistant: () => assistant?.open(), shouldHide: () => !quitting })
+    desktopOpening ||= createDesktop({ initialServer: config?.server, onDevices: showWindow, onDeviceState: publicState, onAssistant: () => assistant?.open(), onShortcutsChange: setDesktopShortcuts, onShortcutCapture: value => assistant?.pauseShortcuts(value), shouldHide: () => !quitting })
       .then(value => { desktop = value; return value; }).finally(() => { desktopOpening = null; });
     await desktopOpening;
   }
@@ -149,6 +149,16 @@ const credentialStore = createCredentialStore({ file: configPath(), safeStorage 
 function loadConfig() { return credentialStore.load(); }
 function saveConfig(next) { credentialStore.save(next); }
 
+function setDesktopShortcuts(value) {
+  const next = require("./assistant-shortcuts.cjs").normalize(value, overlayPreferences.getCancelShortcut());
+  computerUseOverlay.setCancelShortcut(next.cancel, () => overlayPreferences.setAssistantShortcuts(next));
+  assistant?.shortcutsChanged();
+  const menuItem = Menu.getApplicationMenu()?.getMenuItemById("metis-device-settings");
+  if (menuItem) menuItem.accelerator = next.deviceSettings;
+  broadcast();
+  return next;
+}
+
 function setOverlayCaptureHidden(value) {
   if (typeof value !== "boolean") throw new TypeError("Capture visibility must be a boolean");
   const previous = overlayPreferences.get();
@@ -258,12 +268,12 @@ function trayImage() {
 
 function updateTray() {
   if (!tray) return;
-  const key = JSON.stringify([status.connection, Boolean(config), autostartEnabled]);
+  const key = JSON.stringify([status.connection, Boolean(config), autostartEnabled, overlayPreferences?.getAssistantShortcuts?.()]);
   if (key === lastTrayKey) return;
   lastTrayKey = key;
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Open Metis", click: () => void showDesktop() },
-    { label: "Open Desktop Assistant", accelerator: "Ctrl+Shift+Space", click: () => void assistant?.open() },
+    { label: "Open Desktop Assistant", accelerator: assistant?.state().hotkey || "Control+Shift+Space", registerAccelerator: false, click: () => void assistant?.open() },
     { label: "Open Remote Client Device Settings", click: () => showWindow() },
     { label: `Connection: ${status.connection}`, enabled: false },
     { type: "separator" },
@@ -351,6 +361,7 @@ async function startRuntime() {
         if (next && JSON.stringify(next) !== JSON.stringify(currentAppearance)) {
           currentAppearance = next;
           computerUseOverlay?.setAppearance(next);
+          assistant?.setAppearance(next);
           broadcast();
         }
         return;
@@ -460,6 +471,7 @@ function registerIpc() {
     config = null;
     currentAppearance = appearance.fallback;
     computerUseOverlay?.setAppearance(currentAppearance);
+    assistant?.setAppearance(currentAppearance);
     fs.rmSync(configPath(), { force: true });
     status.connection = "offline";
     status.error = "";
@@ -481,6 +493,7 @@ function registerIpc() {
   handle("hub:set-overlay-capture-hidden", (_event, value) => setOverlayCaptureHidden(value));
   handle("hub:set-cancel-shortcut", (_event, value) => {
     const next = computerUseOverlay.setCancelShortcut(value, key => overlayPreferences.setCancelShortcut(key));
+    assistant?.shortcutsChanged();
     broadcast();
     return next;
   });
@@ -590,6 +603,8 @@ if (!app.requestSingleInstanceLock()) {
       };
       overlayPreferences = {
         get: () => true, getCancelShortcut: () => "Escape",
+        getAssistantShortcuts: () => require("./assistant-shortcuts.cjs").normalize(),
+        setAssistantShortcuts: value => recover("setAssistantShortcuts",value),
         set: value => recover("set", value),
         setCancelShortcut: value => recover("setCancelShortcut", value),
       };
@@ -600,7 +615,8 @@ if (!app.requestSingleInstanceLock()) {
       getServer: () => desktop?.getState().server || config?.server || require("./policy.cjs").DEFAULT_SERVER,
       getDevice: () => ({ clientId:config?.clientId || "", hostname:os.hostname(), platform:process.platform, version:app.getVersion() }),
       computerOverlay:computerUseOverlay, appearance:currentAppearance,
-      onOpenChat: async id => { await showDesktop(); if(id)await desktop.getView()?.webContents.loadURL(new URL("/?chat="+encodeURIComponent(id),desktop.getState().server).href); }
+      getShortcuts: () => overlayPreferences.getAssistantShortcuts(), onDevices: showWindow,
+      onOpenChat: async id => { await showDesktop(); if(id)await desktop.getView()?.webContents.loadURL(new URL("/?c="+encodeURIComponent(id),desktop.getState().server).href); }
     });
     await probeDesktop();
     desktopProbeTimer = setInterval(() => { probeDesktop().catch(() => {}); }, 20_000);

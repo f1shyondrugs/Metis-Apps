@@ -84,6 +84,14 @@ async function main() {
   const state = await hub.webContents.executeJavaScript('metis.state()');
   assert.equal(state.paired, true); assert.equal(state.credential, undefined);
   console.log('SEPARATE_RENDERERS_AND_IPC_OK');
+  const originalShortcuts=api.publicState().assistant.shortcuts;
+  await remote.executeJavaScript('metisApp.setShortcuts('+JSON.stringify({...originalShortcuts,focusInput:'F6'})+')');
+  assert.equal(api.publicState().assistant.shortcuts.focusInput,'F6');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(directory,'preferences.json'),'utf8')).assistantShortcuts.focusInput,'F6');
+  const assistant=api.getAssistant();await assistant.open();
+  await assistant.getWindow().webContents.executeJavaScript('metisAssistant.openChat("fixture-chat")');
+  await waitFor(()=>new URL(remote.getURL()).searchParams.get('c')==='fixture-chat');
+  console.log('ASSISTANT_SHORTCUTS_PERSIST_AND_OPEN_EXACT_CHAT_OK');
   async function command(id) {
     socket.send(JSON.stringify({ type: 'request', requestId: id, action: 'get_info', params: {} }));
     await waitFor(() => responses.has(id));

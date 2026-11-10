@@ -1,6 +1,6 @@
 {
   "name": "metis-ai-remote-client",
-  "version": "1.6.2",
+  "version": "1.7.0",
   "private": true,
   "description": "Metis desktop app with integrated device connection",
   "main": "main.cjs",
@@ -14,7 +14,7 @@
     "build:linux": "npm run prepare:client && electron-builder --linux AppImage --x64",
     "build:dir": "npm run prepare:client && electron-builder --dir",
     "pretest": "node -e \"require('electron')\"",
-    "test": "npm run prepare:client && node --test ../tests/*.test.mjs tests/policy.test.cjs tests/assistant-hold.test.cjs",
+    "test": "npm run prepare:client && node --test ../tests/*.test.mjs tests/policy.test.cjs tests/assistant-hold.test.cjs tests/assistant-shortcuts.test.cjs",
     "check": "node scripts/check.cjs",
     "test:e2e": "electron tests/smoke.cjs && electron tests/unified.cjs && electron tests/assistant.cjs",
     "generate:icons": "node scripts/generate-icons.mjs"
@@ -58,6 +58,7 @@
       "computer-use-overlay.cjs",
       "appearance.cjs",
       "cancel-shortcut.cjs",
+      "assistant-shortcuts.cjs",
       "overlay-preferences.cjs",
       "libmetisdesktop.dylib",
       "assets/icon.ico",
