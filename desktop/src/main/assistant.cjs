@@ -131,10 +131,11 @@ function createAssistant({ getServer, getDevice, onOpenChat, computerOverlay, ap
         if(event.keycode===keys.Escape && visible)close();
       };
       const up=event=>{ if([keys.Space,keys.Ctrl,keys.CtrlRight,keys.Shift,keys.ShiftRight].includes(event.keycode))gesture.up(); };
-      if(!globalShortcut.register('Ctrl+Shift+Space',()=>gesture.down()))throw new Error('Ctrl+Shift+Space is already in use. Open the assistant from the tray.');
+      // A shared native key listener also works when another app has registered
+      // the accelerator. Do not disable hold-to-talk on that computer.
       try {uIOhook.on('keydown',down);uIOhook.on('keyup',up);uIOhook.start();hookStarted=true;}
-      catch(cause){globalShortcut.unregister('Ctrl+Shift+Space');uIOhook.removeListener('keydown',down);uIOhook.removeListener('keyup',up);throw cause;}
-      return ()=>{globalShortcut.unregister('Ctrl+Shift+Space');uIOhook.removeListener('keydown',down);uIOhook.removeListener('keyup',up);uIOhook.stop();};
+      catch(cause){uIOhook.removeListener('keydown',down);uIOhook.removeListener('keyup',up);throw cause;}
+      return ()=>{uIOhook.removeListener('keydown',down);uIOhook.removeListener('keyup',up);uIOhook.stop();};
     } catch(cause) {error=cause.message;return ()=>{};}
   }
   const stopHook=startHook();
