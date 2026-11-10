@@ -260,7 +260,7 @@ function updateTray() {
   lastTrayKey = key;
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Open Metis", click: () => void showDesktop() },
-    { label: "Device settings", click: () => showWindow() },
+    { label: "Open Remote Client Device Settings", click: () => showWindow() },
     { label: `Connection: ${status.connection}`, enabled: false },
     { type: "separator" },
     { label: "Start at login", type: "checkbox", checked: autostartEnabled,
@@ -282,7 +282,7 @@ function createWindow() {
     height: 740,
     minWidth: 390,
     minHeight: 560,
-    title: "Metis — Device settings",
+    title: "Metis — Remote Client Device Settings",
     icon: path.join(__dirname, "assets", process.platform === "win32" ? "icon.ico" : "icon.png"),
     show: false,
     autoHideMenuBar: true,

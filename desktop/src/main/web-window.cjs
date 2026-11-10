@@ -142,7 +142,7 @@ async function createDesktop({ onDevices = () => {}, shouldHide = () => false, i
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { label: 'Metis', submenu: [
       { label: 'Home', accelerator: 'CmdOrCtrl+Home', click: () => { void load(); } },
-      { label: 'Device settings…', accelerator: 'CmdOrCtrl+Shift+D', click: onDevices },
+      { label: 'Open Remote Client Device Settings', accelerator: 'CmdOrCtrl+Shift+D', click: onDevices },
       { label: 'Change server…', accelerator: 'CmdOrCtrl+,', click: settings },
       { label: 'Open in browser', click: () => openExternal(server) },
       { type: 'separator' },
