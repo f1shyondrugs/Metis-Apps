@@ -93,7 +93,7 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
   }
   function draw() {
     const phase=elapsed/1800, tau=2*Math.PI;
-    smoothLevel += (voiceLevel-smoothLevel)*.16;
+    smoothLevel = reduced.matches ? 0 : smoothLevel+(voiceLevel-smoothLevel)*.16;
     const progress=reduced.matches?1:1-Math.pow(1-Math.min(1,(performance.now()-enteredAt)/720),3);
     const moved=points.map(p=>{
       // Integer harmonics close seamlessly at the first/last sample.
@@ -112,6 +112,7 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
     dots.setAttribute("opacity",(.87+.11*Math.sin(elapsed/750)).toFixed(3));
   }
   function tick(now) {
+    if (reduced.matches || document.hidden) return;
     elapsed+=Math.min(now-previous,100); previous=now;
     if (now-lastDraw>=1000/30) { draw(); lastDraw=now; }
     frame=requestAnimationFrame(tick);

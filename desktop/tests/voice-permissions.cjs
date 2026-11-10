@@ -34,6 +34,13 @@ async function main(){
  const win=new BrowserWindow({show:true,width:1440,height:900,webPreferences:{sandbox:true,backgroundThrottling:false}});
  await win.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(createOverlayHtml(undefined,'Escape','voice')));
  const wc=win.webContents;
+ // CI hosts can default to reduced motion. Exercise both modes explicitly.
+ wc.debugger.attach('1.3');
+ await wc.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
+ for(let i=0;i<50;i++){
+  if(!await wc.executeJavaScript('matchMedia("(prefers-reduced-motion: reduce)").matches'))break;
+  await pause(20);
+ }
  const band=()=>wc.executeJavaScript('(()=>{const p=document.querySelector(".wave"),n=p.getTotalLength(),ys=[];for(let i=0;i<1000;i++){const q=p.getPointAtLength(n*i/1000);if(q.x>innerWidth*.1&&q.x<innerWidth*.9&&q.y<innerHeight*.2)ys.push(q.y)}return Math.max(...ys)})()');
  for(const [width,height] of [[390,844],[768,900],[1440,900]]){
   win.setSize(width,height);
@@ -51,9 +58,13 @@ async function main(){
   await pause(800);
   assert.equal(await wc.executeJavaScript('getComputedStyle(document.querySelector(".edge")).visibility'),'visible');
  }
- wc.debugger.attach('1.3');
  await wc.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
- await pause(100);
+ for(let i=0;i<50;i++){
+  if(await wc.executeJavaScript('matchMedia("(prefers-reduced-motion: reduce)").matches'))break;
+  await pause(20);
+ }
+ assert.equal(await wc.executeJavaScript('matchMedia("(prefers-reduced-motion: reduce)").matches'),true);
+ await pause(250);
  const still=await wc.executeJavaScript('document.querySelector(".wave").getAttribute("d")');
  await pause(150);
  assert.equal(await wc.executeJavaScript('document.querySelector(".wave").getAttribute("d")'),still);
