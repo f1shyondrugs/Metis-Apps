@@ -64,6 +64,7 @@ if(hostMode){
   server=http.createServer((req,res)=>{
    const url=new URL(req.url,'http://fixture');
    const json=value=>{res.setHeader('content-type','application/json');res.end(JSON.stringify(value));};
+   if(url.pathname==='/api/models')return json({models:[{id:'fixture/native-last',providerId:'fixture',displayName:'Native last model',parameters:[],defaultParams:[]},{id:'fixture/native-first',providerId:'fixture',displayName:'Native first model',parameters:[],defaultParams:[]}]});
    if(url.pathname==='/api/preferences')return setTimeout(()=>json({settings:{voiceInput:{enabled:true,provider:'openai',connectionId:'fixture',modelId:'fixture',realtime:false,maxDurationSeconds:60}}}),650);
    if(url.pathname==='/api/voice/transcribe'){req.resume();return json({transcript:'Fixture voice transcript',job:{id:'fixture-voice',status:'completed',transcript:'Fixture voice transcript'}});}
    if(url.pathname.startsWith('/asset/')){
@@ -143,9 +144,13 @@ if(hostMode){
   trace.push({audioMax:Math.max(0,...levels),wavePeak:peak,edgeState:await edge.webContents.executeJavaScript('({level:voiceLevel,smooth:smoothLevel,reduced:reduced.matches,hidden:document.hidden,elapsed})')});
   assert.ok(peak>19,'Real synthetic microphone audio must reach the native waves: '+peak);
   proofs.push('HOTKEY_RELEASE_KEEPS_RECORDING_AND_REAL_AUDIO_DRIVES_WAVES');
-  await tap(hostHwnd,0x77,0x42);
+  await tap(hostHwnd,0x75,0x40);await until(()=>Number(foreground())===hwnd,'type during voice');
+  await tap(hwnd,0x41,0x1e);
+  assert.equal(await wc.executeJavaScript('Array.from(document.querySelectorAll("button")).some(b=>b.ariaLabel==="Stop assistant recording")'),true,'Text focus keeps capture active');
+  proofs.push('REAL_TYPING_WORKS_WHILE_MICROPHONE_KEEPS_RECORDING');
+  await tap(hwnd,0x77,0x42);
   await until(()=>wc.executeJavaScript('document.querySelector("textarea").value.includes("Fixture voice transcript")'),'second press stops and transcribes');
-  assert.equal(Number(foreground()),hostHwnd);
+  assert.equal(Number(foreground()),hwnd,'Editing keeps a reviewable draft instead of automatic send');
   proofs.push('SECOND_HOTKEY_PRESS_STOPS_AND_INSERTS_TRANSCRIPTION');
   console.log('ASSISTANT_NATIVE_INPUT_AUDIO_TOGGLE_OK');finish();
  }
