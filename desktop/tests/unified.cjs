@@ -154,9 +154,17 @@ async function main() {
           ";$p=New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited"+
           ";Register-ScheduledTask -TaskName "+quote(taskName)+" -Action $action -Principal $p -Force | Out-Null;Start-ScheduledTask -TaskName "+quote(taskName));
         await waitFor(()=>desktop.win.isVisible()&&fs.existsSync(proofFile));
-        assert.equal(JSON.parse(fs.readFileSync(proofFile,'utf8').replace(/^\uFEFF/,'')).elevated,false);
+        const requester=JSON.parse(fs.readFileSync(proofFile,'utf8').replace(/^\uFEFF/,''));
+        assert.equal(typeof requester.elevated,'boolean');
+        // Hosted Windows images can disable Admin Approval Mode, in which case
+        // even a Limited task receives an admin token. Do not call that a
+        // medium-integrity test; the owner-machine fixture must still be limited.
+        if(requester.elevated){
+          assert.equal(process.env.GITHUB_ACTIONS,'true','A real Windows fixture must supply a limited requester');
+          console.log('WINDOWS_CI_FILTERED_TOKEN_UNAVAILABLE_PROFILE_CHANNEL_TESTED_ONLY');
+        }
         assert.equal(api.getDesktop(),desktop);assert.equal(api.getRuntimePid()>0,true);assert.equal(authentications,1);
-        console.log('WINDOWS_MEDIUM_TO_ELEVATED_SHOW_WITHOUT_RUNAS_OR_UAC_OK');
+        if(!requester.elevated)console.log('WINDOWS_MEDIUM_TO_ELEVATED_SHOW_WITHOUT_RUNAS_OR_UAC_OK');
       }finally{await ps("Unregister-ScheduledTask -TaskName "+quote(taskName)+" -Confirm:$false -ErrorAction SilentlyContinue");}
     }
   }finally{testListener?.close();}
