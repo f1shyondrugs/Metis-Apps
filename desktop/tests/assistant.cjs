@@ -17,7 +17,8 @@ async function main(){
  const server='http://127.0.0.1:'+fixture.address().port;
  const emitter=new EventEmitter();emitter.start=()=>{};emitter.stop=()=>{};
  const hook={uIOhook:emitter,UiohookKey:{Space:57,Escape:1,Ctrl:29,CtrlRight:3613,Shift:42,ShiftRight:54}};
- const assistant=createAssistant({getServer:()=>server,getDevice:()=>({clientId:'fixture',hostname:'Fixture PC',platform:process.platform,version:'fixture'}),onOpenChat:()=>{},hook});
+ let escapeClears=0;
+ const assistant=createAssistant({onEscape:()=>{escapeClears++},getServer:()=>server,getDevice:()=>({clientId:'fixture',hostname:'Fixture PC',platform:process.platform,version:'fixture'}),onOpenChat:()=>{},hook});
  await session.fromPartition('persist:metis-web').cookies.set({url:server,name:'metis_fixture',value:'session'});
  assistant.gesture.down();assistant.gesture.up();assistant.gesture.down();assistant.gesture.up();
  await until(()=>assistant.getWindow()?.isVisible());
@@ -72,6 +73,7 @@ async function main(){
  await foreign.loadURL(server+'/desktop-assistant');
  await assert.rejects(foreign.webContents.executeJavaScript('metisAssistant.capture()'),/Access denied/);foreign.destroy();
  console.log('ASSISTANT_PATH_AND_SENDER_GUARDS_OK');
+ emitter.emit('keydown',{keycode:1});assert.equal(escapeClears,1);console.log('ASSISTANT_GLOBAL_ESCAPE_ANNOTATION_CALLBACK_OK');
  assistant.destroy();fixture.close();
  console.log('ASSISTANT_OK');
 }

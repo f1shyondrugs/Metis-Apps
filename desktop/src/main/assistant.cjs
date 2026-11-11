@@ -10,7 +10,7 @@ const { createForegroundRestore } = require('./assistant-focus.cjs');
 
 function createAssistant({
   getServer, getDevice, onOpenChat, onDevices = () => {}, computerOverlay, appearance, hook,
-  hideFromCapture = true, getShortcuts = () => shortcuts.defaults, foreground = createForegroundRestore(),
+  hideFromCapture = true, annotationOverlay, onEscape = () => {}, getShortcuts = () => shortcuts.defaults, foreground = createForegroundRestore(),
   captureSources = options => desktopCapturer.getSources(options)
 }) {
   let win, server, opening, ready = false, visible = false, recording = false, capturing = false;
@@ -133,7 +133,7 @@ function createAssistant({
       if (!getDevice().clientId) throw new Error('Pair this device before sending screen context.');
       const displays = screen.getAllDisplays();
       if (!displays.length || displays.length > 10) throw new Error('Screen context supports 1–10 connected monitors.');
-      win.hide(); edges.suspendCapture(); computerOverlay?.suspendCapture();
+      win.hide(); edges.suspendCapture(); computerOverlay?.suspendCapture(); annotationOverlay?.suspendCapture();
       await new Promise(resolve => setTimeout(resolve,180));
       const sources = await captureSources({ types:['screen'], thumbnailSize:{width:1920,height:1080}, fetchWindowIcons:false });
       const monitors = displays.map(display => {
@@ -144,7 +144,7 @@ function createAssistant({
       });
       return { device:getDevice(), capturedAt:new Date().toISOString(), monitors };
     } finally {
-      capturing = false; edges.resumeCapture(); computerOverlay?.resumeCapture();
+      capturing = false; edges.resumeCapture(); computerOverlay?.resumeCapture(); annotationOverlay?.resumeCapture();
       if (wasVisible && visible && win && !win.isDestroyed()) {
         if (editing) { win.show(); win.focus(); } else win.showInactive();
       }
@@ -211,6 +211,7 @@ function createAssistant({
       if (process.platform === 'linux' && !process.env.DISPLAY) throw new Error('Global assistant hotkey requires an X11 desktop.');
       const {uIOhook,UiohookKey:keys} = hook || require('uiohook-napi');
       const down = event => {
+        if (event.keycode === keys.Escape) onEscape();
         if (shortcutsPaused) return;
         const repeat = held.has(event.keycode); held.add(event.keycode);
         const map = bindings();

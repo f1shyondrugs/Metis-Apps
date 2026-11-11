@@ -26,6 +26,8 @@ async function main() {
     if (request.url === '/api/remote-clients/hub') {
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ client: { name: 'Fixture device' }, audit: [] }));
+    } else if(request.url === '/desktop-overlay') {
+      response.setHeader('content-type','text/html');response.end('<!doctype html><script>window.scenes=[];metisOverlay.onState(s=>scenes.push(s));metisOverlay.state().then(s=>scenes.push(s));</script>');
     } else {
       response.setHeader('content-type', 'text/html');
       response.end('<!doctype html><title>Metis fixture</title><h1>Metis fixture</h1>');
@@ -34,7 +36,7 @@ async function main() {
   fixture.listen(0, '127.0.0.1'); await once(fixture, 'listening');
   const server = 'http://127.0.0.1:' + fixture.address().port;
   const wss = new WebSocketServer({ server: fixture });
-  let socket, authentications = 0;
+  let socket, authentications = 0, overlayCapability=false;
   const responses = new Map();
   wss.on('connection', ws => {
     socket = ws;
@@ -46,7 +48,7 @@ async function main() {
         authentications++;
         ws.send(JSON.stringify({ type: 'authenticated', clientId: message.clientId }));
       }
-      if (message.type === 'heartbeat') ws.send(JSON.stringify({ type: 'heartbeat_ack' }));
+      if (message.type === 'heartbeat') { overlayCapability=message.overlayAnnotations===true;ws.send(JSON.stringify({ type: 'heartbeat_ack' })); }
       if (message.type === 'response') responses.set(message.requestId, message);
     });
   });
@@ -84,6 +86,16 @@ async function main() {
   const state = await hub.webContents.executeJavaScript('metis.state()');
   assert.equal(state.paired, true); assert.equal(state.credential, undefined);
   console.log('SEPARATE_RENDERERS_AND_IPC_OK');
+  if(api.publicState().desktopAvailable){
+  await waitFor(()=>overlayCapability);
+  socket.send(JSON.stringify({type:'request',requestId:'overlay-status',action:'desktop_overlay',params:{operation:'status'}}));
+  await waitFor(()=>responses.has('overlay-status'));assert.equal(responses.get('overlay-status').ok,true);
+  const display=responses.get('overlay-status').result.displays[0];
+  socket.send(JSON.stringify({type:'request',requestId:'overlay-add',action:'desktop_overlay',params:{operation:'add',display_id:display.id,items:[{id:'fixture',type:'rect',x:10,y:10,width:100,height:100}]}}));
+  await waitFor(()=>responses.has('overlay-add'));assert.equal(responses.get('overlay-add').ok,true);
+  assert.equal(api.getAnnotationOverlay().getWindows()[0].isVisible(),true);
+  assert.equal(authentications,1);console.log('ANNOTATION_UTILITY_PROCESS_RPC_CAPABILITY_AND_ONE_CONNECTION_OK');
+  }else{assert.equal(overlayCapability,false);console.log('ANNOTATION_UTILITY_RPC_SKIPPED_NO_INTERACTIVE_GUI');}
   const originalShortcuts=api.publicState().assistant.shortcuts;
   await remote.executeJavaScript('metisApp.setShortcuts('+JSON.stringify({...originalShortcuts,focusInput:'F6'})+')');
   assert.equal(api.publicState().assistant.shortcuts.focusInput,'F6');

@@ -27,8 +27,9 @@ process.parentPort.on('message', async ({ data }) => {
         config: data.config, configPath: data.configPath,
         desktopGuiAvailable: () => capabilities.desktopAvailable === true,
         nativeNotificationsAvailable: () => capabilities.nativeNotifications === true,
+        overlayAnnotationsAvailable: () => capabilities.overlayAnnotations === true,
         showNotification: value => request('notification', value),
-        onEvent: value => value.type === 'computer_use'
+        onEvent: value => ['computer_use','desktop_overlay'].includes(value.type)
           ? request('event', value)
           : process.parentPort.postMessage({ type: 'event', value })
       });

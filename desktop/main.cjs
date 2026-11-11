@@ -127,6 +127,7 @@ let window;
 let tray;
 let runtime;
 let computerUseOverlay;
+let annotationOverlay;
 let overlayPreferences;
 let computerUseCursorTimer;
 let config;
@@ -148,7 +149,7 @@ async function probeDesktop() {
       status.desktopReason = result.reason || "";
     }
   } catch (error) { status.desktopAvailable = false; status.desktopReason = error.stderr?.trim() || error.message; }
-  runtime?.setCapabilities({ desktopAvailable: status.desktopAvailable, nativeNotifications: screen.getAllDisplays().length > 0 && Notification.isSupported() });
+  runtime?.setCapabilities({ desktopAvailable: status.desktopAvailable, overlayAnnotations: Boolean(annotationOverlay && status.desktopAvailable), nativeNotifications: screen.getAllDisplays().length > 0 && Notification.isSupported() });
   broadcast();
 }
 
@@ -176,10 +177,12 @@ function setOverlayCaptureHidden(value) {
   try {
     computerUseOverlay.setHideFromCapture(value);
     assistant?.setHideFromCapture(value);
+    annotationOverlay?.setHideFromCapture(value);
     overlayPreferences.set(value);
   } catch (error) {
     computerUseOverlay.setHideFromCapture(previous);
     assistant?.setHideFromCapture(previous);
+    annotationOverlay?.setHideFromCapture(previous);
     throw error;
   }
   broadcast();
@@ -284,13 +287,17 @@ function trayImage() {
 
 function updateTray() {
   if (!tray) return;
-  const key = JSON.stringify([status.connection, Boolean(config), autostartEnabled, overlayPreferences?.getAssistantShortcuts?.()]);
+  const key = JSON.stringify([status.connection, Boolean(config), autostartEnabled, overlayPreferences?.getAssistantShortcuts?.(), annotationOverlay?.status()]);
   if (key === lastTrayKey) return;
   lastTrayKey = key;
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Open Metis", click: () => void showDesktop() },
     { label: "Open Desktop Assistant", accelerator: assistant?.state().hotkey || "Control+Shift+Space", registerAccelerator: false, click: () => void assistant?.open() },
     { label: "Open Remote Client Device Settings", click: () => showWindow() },
+    { label: "Screen annotations", submenu: [
+      { label: "Clear all annotations", click: () => annotationOverlay?.clearAll() },
+      ...(annotationOverlay?.status().displays || []).flatMap(d => d.items.filter(i=>i.type==="card").map(i=>({ label: "Interact: "+d.name+" / "+i.id, click: () => { annotationOverlay.execute({operation:"interact",display_id:d.id,interactive_id:i.id}).catch(error=>{status.error=error.message;broadcast();}); } }))),
+    ] },
     { label: `Connection: ${status.connection}`, enabled: false },
     { type: "separator" },
     { label: "Start at login", type: "checkbox", checked: autostartEnabled,
@@ -356,6 +363,7 @@ function stopComputerUseCursor() {
 }
 
 async function startRuntime() {
+  annotationOverlay?.clearAll();
   computerUseOverlay?.hide();
   runtime?.stop();
   runtime = null;
@@ -369,15 +377,20 @@ async function startRuntime() {
     utilityProcess,
     config,
     configPath: configPath(),
-    capabilities: { desktopAvailable: status.desktopAvailable, nativeNotifications: screen.getAllDisplays().length > 0 && Notification.isSupported() },
+    capabilities: { desktopAvailable: status.desktopAvailable, overlayAnnotations: Boolean(annotationOverlay && status.desktopAvailable), nativeNotifications: screen.getAllDisplays().length > 0 && Notification.isSupported() },
     showNotification: notification => showNativeNotification({ Notification, openChat: openDesktopChat, server: config.server, notification }),
     onEvent(event) {
+      if (event.type === "desktop_overlay") {
+        if (!annotationOverlay) throw new Error("Desktop annotations are not available");
+        return annotationOverlay.execute(event.params);
+      }
       if (event.type === "appearance") {
         const next = appearance.normalize(event.appearance);
         if (next && JSON.stringify(next) !== JSON.stringify(currentAppearance)) {
           currentAppearance = next;
           computerUseOverlay?.setAppearance(next);
           assistant?.setAppearance(next);
+          annotationOverlay?.setAppearance(next);
           broadcast();
         }
         return;
@@ -388,12 +401,13 @@ async function startRuntime() {
           if (event.operation === "key") computerUseOverlay?.suppressInjectedShortcut(event.key);
           startComputerUseCursor();
         } else if (event.phase === "end") stopComputerUseCursor();
-        else if (event.phase === "capture-start") computerUseOverlay?.suspendCapture();
-        else if (event.phase === "capture-end") computerUseOverlay?.resumeCapture();
+        else if (event.phase === "capture-start") { computerUseOverlay?.suspendCapture(); annotationOverlay?.suspendCapture(); }
+        else if (event.phase === "capture-end") { computerUseOverlay?.resumeCapture(); annotationOverlay?.resumeCapture(); }
         return;
       }
       if (event.type !== "connection") return;
       if (event.status !== "online") {
+        annotationOverlay?.clearAll();
         clearInterval(computerUseCursorTimer);
         computerUseCursorTimer = undefined;
         computerUseOverlay?.hide();
@@ -640,10 +654,15 @@ if (!app.requestSingleInstanceLock()) {
       };
     }
     computerUseOverlay = createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCancel: cancelComputerUse, hideFromCapture: overlayPreferences.get(), cancelShortcut: overlayPreferences.getCancelShortcut() });
+    annotationOverlay = require('./src/main/annotation-overlay.cjs').createAnnotationOverlay({
+      BrowserWindow, screen, ipcMain, getServer: () => config?.server || desktop?.getState().server || require('./policy.cjs').DEFAULT_SERVER,
+      appearance: currentAppearance, hideFromCapture: overlayPreferences.get(), onChange: () => { lastTrayKey = ''; updateTray(); }
+    });
     const { createAssistant } = require("./src/main/assistant.cjs");
     assistant = createAssistant({
       getServer: () => desktop?.getState().server || config?.server || require("./policy.cjs").DEFAULT_SERVER,
       getDevice: () => ({ clientId:config?.clientId || "", hostname:os.hostname(), platform:process.platform, version:app.getVersion() }),
+      annotationOverlay, onEscape: () => annotationOverlay?.clearAll(),
       computerOverlay:computerUseOverlay, appearance:currentAppearance, hideFromCapture:overlayPreferences.get(),
       getShortcuts: () => overlayPreferences.getAssistantShortcuts(), onDevices: showWindow,
       onOpenChat: id => openDesktopChat(id)
@@ -673,9 +692,10 @@ if (!app.requestSingleInstanceLock()) {
     quitting = true;
     computerUseOverlay?.hide();
     assistant?.destroy();
+    annotationOverlay?.destroy();
     runtime?.stop();
   });
   app.on("window-all-closed", () => {});
 }
 
-module.exports = { showDesktop, showWindow, getDesktop: () => desktop, getDeviceWindow: () => window, getRuntimePid: () => runtime?.pid, getAssistant: () => assistant, publicState };
+module.exports = { showDesktop, showWindow, getDesktop: () => desktop, getDeviceWindow: () => window, getRuntimePid: () => runtime?.pid, getAssistant: () => assistant, getAnnotationOverlay: () => annotationOverlay, publicState };

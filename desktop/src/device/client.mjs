@@ -13,7 +13,7 @@ import { createNotificationReceiver } from "./notification-client.mjs";
 const execFileAsync = promisify(execFile);
 const shell = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : (process.env.SHELL || "/bin/sh");
 
-export function startRemoteClient({ config: suppliedConfig, configPath, onEvent = () => {}, desktopGuiAvailable = () => false, nativeNotificationsAvailable = () => false, showNotification } = {}) {
+export function startRemoteClient({ config: suppliedConfig, configPath, onEvent = () => {}, desktopGuiAvailable = () => false, nativeNotificationsAvailable = () => false, overlayAnnotationsAvailable = () => false, showNotification } = {}) {
   const resolvedPath = configPath || process.env.METIS_REMOTE_CLIENT_CONFIG ||
     path.join(os.homedir(), ".metis-ai", "remote-client.json");
   const config = suppliedConfig || JSON.parse(fs.readFileSync(resolvedPath, "utf8").replace(/^\uFEFF/, ""));
@@ -24,7 +24,7 @@ export function startRemoteClient({ config: suppliedConfig, configPath, onEvent 
   const emit = (event) => {
     try { return onEvent(event); } catch (error) {
       log("event callback", error?.message || error);
-      if (event.type === "computer_use") throw error;
+      if (event.type === "computer_use" || event.type === "desktop_overlay") throw error;
     }
   };
   const server = String(config.server || "").replace(/\/+$/, "");
@@ -137,6 +137,10 @@ export function startRemoteClient({ config: suppliedConfig, configPath, onEvent 
         memory: { total: os.totalmem(), free: os.freemem() },
         uptime: os.uptime(),
       };
+    }
+    if (action === "desktop_overlay") {
+      if (!desktopGuiAvailable() || !overlayAnnotationsAvailable()) throw new Error("Desktop annotations require an updated desktop app and an interactive display");
+      return await emit({ type: "desktop_overlay", params });
     }
     if (action === "computer_use") {
       if (!desktopGuiAvailable()) throw new Error("Computer Use requires an interactive desktop display");
@@ -267,9 +271,9 @@ export function startRemoteClient({ config: suppliedConfig, configPath, onEvent 
         retryMs = 1_000;
         log("authenticated", message.clientId || "");
         emit({ type: "connection", status: "online", at: new Date().toISOString() });
-        send({ type: "heartbeat", appearance: true, desktopGui: Boolean(desktopGuiAvailable()), nativeNotifications: typeof showNotification === "function" && nativeNotificationsAvailable() === true });
+        send({ type: "heartbeat", appearance: true, desktopGui: Boolean(desktopGuiAvailable()), overlayAnnotations: Boolean(overlayAnnotationsAvailable()), nativeNotifications: typeof showNotification === "function" && nativeNotificationsAvailable() === true });
         clearInterval(heartbeatTimer);
-        heartbeatTimer = setInterval(() => send({ type: "heartbeat", appearance: true, desktopGui: Boolean(desktopGuiAvailable()), nativeNotifications: typeof showNotification === "function" && nativeNotificationsAvailable() === true }), 20_000);
+        heartbeatTimer = setInterval(() => send({ type: "heartbeat", appearance: true, desktopGui: Boolean(desktopGuiAvailable()), overlayAnnotations: Boolean(overlayAnnotationsAvailable()), nativeNotifications: typeof showNotification === "function" && nativeNotificationsAvailable() === true }), 20_000);
         clearTimeout(heartbeatTimeout);
         heartbeatTimeout = setTimeout(() => current.terminate(), 75_000);
         return;
