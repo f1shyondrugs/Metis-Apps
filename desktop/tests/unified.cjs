@@ -1,5 +1,5 @@
 // Real Electron + device protocol, isolated files and a local fixture only.
-const { app, safeStorage } = require('electron');
+const { app, safeStorage, BrowserWindow } = require('electron');
 app.disableHardwareAcceleration();
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -89,6 +89,14 @@ async function main() {
   assert.equal(api.publicState().assistant.shortcuts.focusInput,'F6');
   assert.equal(JSON.parse(fs.readFileSync(path.join(directory,'preferences.json'),'utf8')).assistantShortcuts.focusInput,'F6');
   const assistant=api.getAssistant();await assistant.open();
+  await remote.executeJavaScript('metisApp.setOverlayCaptureHidden(false)');
+  assert.equal(assistant.getWindow().isContentProtected(),false);
+  assert.ok(BrowserWindow.getAllWindows().filter(w=>w!==desktop.win&&w!==hub).every(w=>!w.isContentProtected()),'Assistant and every voice perimeter share the visible preference');
+  assert.equal(api.publicState().hideOverlayFromCapture,false);
+  await remote.executeJavaScript('metisApp.setOverlayCaptureHidden(true)');
+  if(process.platform!=='linux')assert.ok(BrowserWindow.getAllWindows().filter(w=>w!==desktop.win&&w!==hub).every(w=>w.isContentProtected()),'Assistant and every voice perimeter share the hidden preference');
+  await assert.rejects(remote.executeJavaScript('metisApp.setOverlayCaptureHidden("false")'),/Invalid capture/);
+  console.log('WEB_CAPTURE_SETTING_UPDATES_ASSISTANT_AND_PERSISTS_OK');
   await assistant.getWindow().webContents.executeJavaScript('metisAssistant.openChat("fixture-chat")');
   await waitFor(()=>new URL(remote.getURL()).searchParams.get('c')==='fixture-chat');
   console.log('ASSISTANT_SHORTCUTS_PERSIST_AND_OPEN_EXACT_CHAT_OK');

@@ -9,7 +9,7 @@ const { registerWebPermissions } = require('./web-permissions.cjs');
 const shellPath = path.join(ROOT, 'ui', 'index.html');
 const shellUrl = pathToFileURL(shellPath).href;
 
-async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}), onAssistant = () => {}, onShortcutsChange = () => {}, onShortcutCapture = () => {}, shouldHide = () => false, initialServer } = {}) {
+async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}), onAssistant = () => {}, onShortcutsChange = () => {}, onShortcutCapture = () => {}, onCaptureHidden, onAutostart, onCheckUpdates, shouldHide = () => false, initialServer } = {}) {
   const configPath = path.join(app.getPath('userData'), 'server.json');
   let server = initialServer ? normalizeServer(initialServer) : DEFAULT_SERVER;
   try { server = normalizeServer(JSON.parse(fs.readFileSync(configPath, 'utf8')).url); } catch {}
@@ -20,6 +20,23 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
     webPreferences: { preload: path.join(__dirname, 'web-preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false }
   });
   let view;
+  let dropCleanup=()=>{};
+  let dropState={available:false,error:''};
+  let dropRegistered=false;
+  const refreshDropTarget=()=>{if(dropRegistered)return;try { dropCleanup=require('./windows-file-drop.cjs').registerWindowsFileDrop(win,{
+    onReady:()=>{dropState={available:true,error:''};},
+    getPresentation:()=>{const state=onDeviceState();return {appearance:state.appearance,hideFromCapture:state.hideOverlayFromCapture};},
+    getEnabled:()=>state.mode==='ready'&&Boolean(view)&&sameOrigin(view.webContents.getURL(),server),
+    getBounds:()=>{const b=win.getContentBounds(),v=view?.getBounds();return v?{x:b.x+v.x,y:b.y+v.y,width:v.width,height:v.height}:b;},
+    onFiles: payload => {
+      const contents=view?.webContents;
+      if(!contents||state.mode!=='ready'||!sameOrigin(contents.getURL(),server))return;
+      const zoom=contents.getZoomFactor();
+      const point={x:payload.point.x/zoom,y:payload.point.y/zoom};
+      contents.send('desktop:files-dropped',{files:payload.files,point});
+    },
+    onError: error => { dropState={available:false,error:String(error.message||'File drops are unavailable. Use Attach files.').slice(0,512)}; }
+  });dropRegistered=true; } catch(error) { dropState={available:false,error:'File drops are unavailable. Use Attach files.'};if(process.env.METIS_DROP_TEST_ROOT)console.error('DROP_HELPER_SETUP_ERROR',error); }};
   let generation = 0;
   let state = { mode: 'loading', server, message: '' };
   const update = (mode, message = '') => {
@@ -72,7 +89,7 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
     contents.on('page-title-updated', (event) => { event.preventDefault(); win.setTitle('Metis'); });
     contents.on('did-finish-load', () => {
       if (generation !== currentGeneration) return;
-      remote.setVisible(true); update('ready'); contents.focus();
+      remote.setVisible(true); update('ready'); refreshDropTarget(); contents.focus();
     });
     const failure = (message) => {
       if (generation !== currentGeneration || win.isDestroyed()) return;
@@ -96,7 +113,23 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
     if (event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame ||
         event.senderFrame.url !== shellUrl) throw new Error('Access denied.');
   }
+  function assertRemote(event) {
+    const contents = view?.webContents;
+    if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
+        !sameOrigin(event.senderFrame.url, server)) throw new Error('Access denied.');
+  }
   const handlers = {
+    'desktop:set-capture-hidden': (event,value) => {
+      assertRemote(event);
+      if (typeof value !== 'boolean' || !onCaptureHidden) throw new Error('Invalid capture preference.');
+      return onCaptureHidden(value);
+    },
+    'desktop:set-autostart': (event,value) => {
+      assertRemote(event);
+      if (typeof value !== 'boolean' || !onAutostart) throw new Error('Invalid startup preference.');
+      return onAutostart(value);
+    },
+    'desktop:check-updates': event => { assertRemote(event); return onCheckUpdates?.(); },
     'desktop:open-device-settings': (event) => {
       const contents = view?.webContents;
       if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
@@ -168,12 +201,13 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
   win.on('resize', resize);
   win.on('close', event => { if (shouldHide()) { event.preventDefault(); win.hide(); } });
   win.on('closed', () => {
+    dropCleanup();
     disposeView();
     for (const channel of Object.keys(handlers)) ipcMain.removeHandler(channel);
   });
   await win.loadFile(shellPath);
   const initialLoad = load();
-  return { win, getView: () => view, getState: () => state, settings, load, initialLoad };
+  return { win, getView: () => view, getState: () => state, getFileDropState:()=>({...dropState}), settings, load, initialLoad };
 }
 function bootstrap() {
   app.commandLine.appendSwitch('lang', 'en-US');

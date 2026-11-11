@@ -10,16 +10,17 @@ const { createForegroundRestore } = require('./assistant-focus.cjs');
 
 function createAssistant({
   getServer, getDevice, onOpenChat, onDevices = () => {}, computerOverlay, appearance, hook,
-  getShortcuts = () => shortcuts.defaults, foreground = createForegroundRestore(),
+  hideFromCapture = true, getShortcuts = () => shortcuts.defaults, foreground = createForegroundRestore(),
   captureSources = options => desktopCapturer.getSources(options)
 }) {
   let win, server, opening, ready = false, visible = false, recording = false, capturing = false;
   let pending = [], hookStarted = false, error = '', editing = false, autoFocusPending = false, currentChat = null;
+  let captureHidden = hideFromCapture;
   let currentAppearance = appearance, shortcutsPaused = false, shortcutCaptureTimer;
   let regions = [], shaped = false, pointerTimer, blurTimer, pointerIgnored = true, nativeShape = '';
   const channel = 'assistant:gesture', held = new Set();
   const bindings = () => shortcuts.normalize(getShortcuts());
-  const edges = createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, mode: 'voice', hideFromCapture: true, cancelShortcut: bindings().cancel, onCancel: () => close() });
+  const edges = createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, mode: 'voice', hideFromCapture: captureHidden, cancelShortcut: bindings().cancel, onCancel: () => close() });
   edges.setAppearance(currentAppearance);
   const gesture = createToggleGesture(value => {
     if (value === 'start') void open('start').catch(reportError);
@@ -88,7 +89,7 @@ function createAssistant({
           autoplayPolicy: 'no-user-gesture-required' }
       });
       win.setAlwaysOnTop(true, 'pop-up-menu');
-      win.setContentProtection(true);
+      win.setContentProtection(captureHidden);
       win.setIgnoreMouseEvents(true);
       registerWebPermissions(win.webContents, server, win);
       win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -230,6 +231,12 @@ function createAssistant({
   const stopHook = startHook();
   return {
     open, close, capture, focusInput, releaseInput, getWindow:() => win, gesture,
+    setHideFromCapture(value) {
+      if (typeof value !== 'boolean') throw new TypeError('Capture visibility must be a boolean');
+      edges.setHideFromCapture(value);
+      if (win && !win.isDestroyed()) win.setContentProtection(value);
+      captureHidden = value;
+    },
     setAppearance(value) { currentAppearance = value; edges.setAppearance(value); },
     shortcutsChanged() { gesture.cancel(); held.clear(); edges.setCancelShortcut(bindings().cancel); send('stop'); send('shortcuts-changed'); },
     pauseShortcuts(value) { clearTimeout(shortcutCaptureTimer); shortcutsPaused=Boolean(value); gesture.cancel(); held.clear(); if(shortcutsPaused)send('stop'); if(shortcutsPaused){shortcutCaptureTimer=setTimeout(()=>{shortcutsPaused=false;},30000);shortcutCaptureTimer.unref?.();} },

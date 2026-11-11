@@ -22,7 +22,7 @@ let desktopOpening;
 let assistant;
 async function showDesktop() {
   if (!desktop || desktop.win.isDestroyed()) {
-    desktopOpening ||= createDesktop({ initialServer: config?.server, onDevices: showWindow, onDeviceState: publicState, onAssistant: () => assistant?.open(), onShortcutsChange: setDesktopShortcuts, onShortcutCapture: value => assistant?.pauseShortcuts(value), shouldHide: () => !quitting })
+    desktopOpening ||= createDesktop({ initialServer: config?.server, onDevices: showWindow, onDeviceState: publicState, onAssistant: () => assistant?.open(), onShortcutsChange: setDesktopShortcuts, onShortcutCapture: value => assistant?.pauseShortcuts(value), onCaptureHidden: setOverlayCaptureHidden, onAutostart: setAutostart, onCheckUpdates: checkUpdates, shouldHide: () => !quitting })
       .then(value => { desktop = value; return value; }).finally(() => { desktopOpening = null; });
     await desktopOpening;
   }
@@ -132,6 +132,8 @@ let computerUseCursorTimer;
 let config;
 let quitting = false;
 let previousConnection = "offline";
+const updates = require('./src/main/app-updates.cjs').createUpdateState();
+const appUpdate = updates.value;
 const status = { connection: "offline", error: "", update: "", desktopAvailable: false, desktopReason: "Checking desktop permissions…", platform: process.platform };
 let desktopProbeTimer;
 async function probeDesktop() {
@@ -173,9 +175,11 @@ function setOverlayCaptureHidden(value) {
   const previous = overlayPreferences.get();
   try {
     computerUseOverlay.setHideFromCapture(value);
+    assistant?.setHideFromCapture(value);
     overlayPreferences.set(value);
   } catch (error) {
     computerUseOverlay.setHideFromCapture(previous);
+    assistant?.setHideFromCapture(previous);
     throw error;
   }
   broadcast();
@@ -188,6 +192,9 @@ function publicState() {
     server: config?.server || "",
     clientId: config?.clientId || "",
     version: app.getVersion(),
+    autostartEnabled,
+    appUpdate: { ...appUpdate },
+    fileDrop: desktop?.getFileDropState?.(),
     assistant: assistant?.state(),
     permissionMode: config?.permissionMode || null,
     platform: process.platform,
@@ -521,18 +528,7 @@ function registerIpc() {
     await probeDesktop();
     return publicState();
   });
-  handle("hub:check-updates", async () => {
-    if (!app.isPackaged) return "Updates are available in installed builds";
-    if (!configureUpdater()) return "Updates are unavailable in this build";
-    try {
-      await autoUpdater.checkForUpdates();
-      return status.update || "Checking for updates";
-    } catch (error) {
-      status.update = error.message || "Update check failed";
-      broadcast();
-      return status.update;
-    }
-  });
+  handle("hub:check-updates", () => checkUpdates());
   handle("hub:desktop-permissions", async (_event, input) => desktopPermissionStatus(Boolean(input?.prompt)));
 }
 
@@ -547,27 +543,36 @@ function configureUpdater() {
   return true;
 }
 
+async function checkUpdates() {
+  if (!app.isPackaged) return "Updates are available in installed builds";
+  if (!configureUpdater()) return "Updates are unavailable in this build";
+  updates.checking(); status.update=appUpdate.message; broadcast();
+  try { await autoUpdater.checkForUpdates(); }
+  catch (error) { updates.error(error); status.update=appUpdate.message; broadcast(); }
+  return status.update;
+}
+
 function setupUpdates() {
   if (!app.isPackaged) return;
   autoUpdater.autoDownload = true;
-  autoUpdater.on("update-available", () => {
-    status.update = "Downloading update";
+  autoUpdater.on("update-available", info => {
+    updates.available(info); status.update = appUpdate.message;
     broadcast();
   });
   autoUpdater.on("update-not-available", () => {
-    status.update = "Up to date";
+    updates.current(); status.update = appUpdate.message;
     broadcast();
   });
-  autoUpdater.on("update-downloaded", () => {
-    status.update = "Update ready; restart the app to install";
+  autoUpdater.on("update-downloaded", info => {
+    updates.ready(info); status.update = appUpdate.message;
     broadcast();
     if (Notification.isSupported()) new Notification({ title: APP_NAME, body: status.update }).show();
   });
   autoUpdater.on("error", (error) => {
-    status.update = error.message || "Update check failed";
+    updates.error(error); status.update = appUpdate.message;
     broadcast();
   });
-  const check = () => configureUpdater() && autoUpdater.checkForUpdates().catch(() => undefined);
+  const check = () => void checkUpdates();
   setTimeout(check, 20_000);
   setInterval(check, 6 * 60 * 60 * 1000);
 }
@@ -639,7 +644,7 @@ if (!app.requestSingleInstanceLock()) {
     assistant = createAssistant({
       getServer: () => desktop?.getState().server || config?.server || require("./policy.cjs").DEFAULT_SERVER,
       getDevice: () => ({ clientId:config?.clientId || "", hostname:os.hostname(), platform:process.platform, version:app.getVersion() }),
-      computerOverlay:computerUseOverlay, appearance:currentAppearance,
+      computerOverlay:computerUseOverlay, appearance:currentAppearance, hideFromCapture:overlayPreferences.get(),
       getShortcuts: () => overlayPreferences.getAssistantShortcuts(), onDevices: showWindow,
       onOpenChat: id => openDesktopChat(id)
     });

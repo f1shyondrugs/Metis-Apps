@@ -53,6 +53,11 @@ async function main(){
  await wc.executeJavaScript('metisAssistant.configure({voiceConfigured:false,chatId:"fixture-chat"})');
  assert.equal(win.isFocusable(),true);
  console.log('ASSISTANT_WITHOUT_VOICE_AUTOFOCUSES_OK');
+ assistant.setHideFromCapture(false);
+ assert.equal(win.isContentProtected(),false);
+ assistant.setHideFromCapture(true);
+ if(process.platform!=='linux')assert.equal(win.isContentProtected(),true);
+ console.log('ASSISTANT_CAPTURE_VISIBILITY_FOLLOWS_SHARED_PREFERENCE_OK');
  const context=await wc.executeJavaScript('metisAssistant.capture()');
  assert.equal(context.device.clientId,'fixture');
  assert.equal(context.monitors.length,screen.getAllDisplays().length);
