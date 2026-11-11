@@ -39,6 +39,13 @@ test("native bridge ACK waits for show, reports failure/timeout, and opens an en
   await assert.rejects(showNativeNotification({Notification:FakeNotification,openExternal:()=>{},server:"https://metis.invalid",notification:n}),/unavailable/);
   FakeNotification.supported=true;FakeNotification.mode="show";
 });
+test("desktop notifications open the same chat in the app by default",async()=>{
+  const opened=[],external=[];
+  await showNativeNotification({Notification:FakeNotification,openChat:async(id,server)=>opened.push({id,server}),openExternal:url=>external.push(url),server:"https://metis.invalid",notification:notification()});
+  FakeNotification.instances.at(-1).emit("click");
+  assert.deepEqual(opened,[{id:notification().chatId,server:"https://metis.invalid"}]);
+  assert.deepEqual(external,[]);
+});
 test("receiver validates fields, dedupes concurrent deliveries and reconnect/restart, and isolates credentials",async()=>{
   const dir=mkdtempSync(path.join(os.tmpdir(),"metis-native-fake-"));
   try {

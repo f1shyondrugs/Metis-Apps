@@ -10,7 +10,7 @@ function notificationChatUrl(server, chatId) {
   }
   return url.href;
 }
-function showNativeNotification({ Notification, openExternal, server, notification, timeoutMs = 10000 }) {
+function showNativeNotification({ Notification, openExternal, openChat, server, notification, timeoutMs = 10000 }) {
   if (!Notification.isSupported()) return Promise.reject(new Error("Native notifications unavailable"));
   const url = notificationChatUrl(server,notification.chatId);
   return new Promise((resolve,reject) => {
@@ -27,7 +27,7 @@ function showNativeNotification({ Notification, openExternal, server, notificati
     native.once("show",() => finish());
     native.once("failed",() => finish(new Error("Native notification failed")));
     native.on("click",() => {
-      try { Promise.resolve(openExternal(url)).catch(() => {}); } catch {}
+      try { Promise.resolve(openChat ? openChat(notification.chatId ?? null, server) : openExternal(url)).catch(() => {}); } catch {}
     });
     try { native.show(); } catch(error) { finish(error); }
   });

@@ -19,14 +19,14 @@ async function main(){
  const hook={uIOhook:emitter,UiohookKey:{Space:57,Escape:1,Ctrl:29,CtrlRight:3613,Shift:42,ShiftRight:54}};
  const assistant=createAssistant({getServer:()=>server,getDevice:()=>({clientId:'fixture',hostname:'Fixture PC',platform:process.platform,version:'fixture'}),onOpenChat:()=>{},hook});
  await session.fromPartition('persist:metis-web').cookies.set({url:server,name:'metis_fixture',value:'session'});
- assistant.gesture.down();assistant.gesture.up();
+ assistant.gesture.down();assistant.gesture.up();assistant.gesture.down();assistant.gesture.up();
  await until(()=>assistant.getWindow()?.isVisible());
  const win=assistant.getWindow(),wc=win.webContents;
  await until(()=>wc.executeJavaScript('window.events?.includes("stop")'));
  assert.deepEqual(await wc.executeJavaScript('[typeof require,typeof process,typeof document.querySelector("iframe").contentWindow.metisAssistant]'),['undefined','undefined','undefined']);
  assert.equal((await wc.session.cookies.get({url:server}))[0].value,'session');
  const events=await wc.executeJavaScript('events');assert.equal(events.filter(value=>value==='start').length,1);assert.ok(events.indexOf('start')<events.indexOf('stop'));
- console.log('ASSISTANT_SANDBOX_SESSION_AND_RELEASE_DURING_LOAD_OK');
+ console.log('ASSISTANT_SANDBOX_SESSION_AND_TOGGLE_DURING_LOAD_OK');
  assert.equal(win.isFocusable(),false);
  await wc.executeJavaScript('metisAssistant.configure({voiceConfigured:true,chatId:"fixture-chat"})');
  assert.equal(win.isFocusable(),false);

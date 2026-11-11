@@ -192,7 +192,7 @@ function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCan
       resizable: false,
       movable: false,
       hasShadow: false,
-      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
     });
     overlay.setAlwaysOnTop(true, "screen-saver");
     // The overlay is passive. Forwarding installs a native mouse path through
@@ -205,7 +205,7 @@ function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCan
       renderShortcut();
       if (mode === "voice") setVoiceState(voiceState.recording,voiceState.label);
       if (active && !suspended && !overlay.isDestroyed()) {
-        overlay.showInactive();
+        if (!overlay.isVisible?.()) overlay.showInactive();
         renderCursor(display, overlay);
       }
     });
@@ -233,7 +233,7 @@ function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCan
       }
       if (overlay.webContents.isLoading()) continue;
       if (suspended) overlay.hide();
-      else overlay.showInactive();
+      else if (!overlay.isVisible?.()) overlay.showInactive();
     }
   }
 

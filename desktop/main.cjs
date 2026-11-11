@@ -16,7 +16,7 @@ const { pathToFileURL } = require("node:url");
 
 const APP_NAME = "Metis";
 const { createDesktop } = require("./src/main/web-window.cjs");
-const { normalizeServer } = require("./policy.cjs");
+const { normalizeServer, sameOrigin } = require("./policy.cjs");
 let desktop;
 let desktopOpening;
 let assistant;
@@ -29,6 +29,15 @@ async function showDesktop() {
   if (desktop.win.isMinimized()) desktop.win.restore();
   desktop.win.show();
   desktop.win.focus();
+}
+async function openDesktopChat(id, expectedServer) {
+  await showDesktop();
+  const server = desktop.getState().server;
+  if (expectedServer && !sameOrigin(server,expectedServer)) {
+    desktop.settings();
+    return;
+  }
+  if (id) await desktop.getView()?.webContents.loadURL(new URL("/?c="+encodeURIComponent(id),server).href);
 }
 const AUTOSTART_TASK = "Metis AI Remote Client";
 let autostartEnabled = false;
@@ -354,7 +363,7 @@ async function startRuntime() {
     config,
     configPath: configPath(),
     capabilities: { desktopAvailable: status.desktopAvailable, nativeNotifications: screen.getAllDisplays().length > 0 && Notification.isSupported() },
-    showNotification: notification => showNativeNotification({ Notification, openExternal: url => shell.openExternal(url), server: config.server, notification }),
+    showNotification: notification => showNativeNotification({ Notification, openChat: openDesktopChat, server: config.server, notification }),
     onEvent(event) {
       if (event.type === "appearance") {
         const next = appearance.normalize(event.appearance);
@@ -616,7 +625,7 @@ if (!app.requestSingleInstanceLock()) {
       getDevice: () => ({ clientId:config?.clientId || "", hostname:os.hostname(), platform:process.platform, version:app.getVersion() }),
       computerOverlay:computerUseOverlay, appearance:currentAppearance,
       getShortcuts: () => overlayPreferences.getAssistantShortcuts(), onDevices: showWindow,
-      onOpenChat: async id => { await showDesktop(); if(id)await desktop.getView()?.webContents.loadURL(new URL("/?c="+encodeURIComponent(id),desktop.getState().server).href); }
+      onOpenChat: id => openDesktopChat(id)
     });
     await probeDesktop();
     desktopProbeTimer = setInterval(() => { probeDesktop().catch(() => {}); }, 20_000);

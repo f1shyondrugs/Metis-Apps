@@ -10,7 +10,7 @@ Signing into the website does not pair your computer. Pair separately in **Devic
 
 ## Desktop Assistant
 
-Hold **Ctrl+Shift+Space** to record. Release before three seconds to finish, or keep holding for three seconds to lock; press the shortcut again or use Stop to finish a locked recording. Escape closes the assistant and cancels recording. The tray also offers **Open Desktop Assistant**. Global key listening requires Accessibility on macOS and X11 on Linux; the tray remains available when the hotkey is unavailable.
+Press **Ctrl+Shift+Space** once to start recording and again to stop. Releasing or holding the key does not stop or restart the recording. Escape closes the assistant and cancels recording. The tray also offers **Open Desktop Assistant**. Global key listening requires Accessibility on macOS and X11 on Linux; the tray remains available when the hotkey is unavailable.
 
 With voice configured, the overlay stays passive: it does not activate or intercept mouse/keyboard input from your game. **Ctrl+Shift+Enter** enters text mode; press it again to return to the prior app. Without voice, the text field is focused automatically. **Ctrl+Shift+M** opens the same saved chat. Change Talk, Focus text, Open chat, local device settings and Dismiss/stop in **Settings → Remote Client → Keyboard shortcuts**. These preferences are local to this device and survive restarts.
 

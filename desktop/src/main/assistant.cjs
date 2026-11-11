@@ -3,7 +3,8 @@ const path = require('node:path');
 const { sameOrigin, normalizeServer } = require('../../policy.cjs');
 const { registerWebPermissions } = require('./web-permissions.cjs');
 const { createComputerUseOverlay } = require('../../computer-use-overlay.cjs');
-const { createHoldGesture } = require('./assistant-hold.cjs');
+const { createToggleGesture } = require('./assistant-toggle.cjs');
+const { interactionRegions } = require('./assistant-regions.cjs');
 const shortcuts = require('../../assistant-shortcuts.cjs');
 const { createForegroundRestore } = require('./assistant-focus.cjs');
 
@@ -15,11 +16,12 @@ function createAssistant({
   let win, server, opening, ready = false, visible = false, recording = false, capturing = false;
   let pending = [], hookStarted = false, error = '', editing = false, autoFocusPending = false, currentChat = null;
   let currentAppearance = appearance, shortcutsPaused = false, shortcutCaptureTimer;
+  let regions = [], shaped = false, pointerTimer, blurTimer, pointerIgnored = true, nativeShape = '';
   const channel = 'assistant:gesture', held = new Set();
   const bindings = () => shortcuts.normalize(getShortcuts());
   const edges = createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, mode: 'voice', hideFromCapture: true, cancelShortcut: bindings().cancel, onCancel: () => close() });
   edges.setAppearance(currentAppearance);
-  const gesture = createHoldGesture(value => {
+  const gesture = createToggleGesture(value => {
     if (value === 'start') void open('start').catch(reportError);
     else send(value);
   });
@@ -34,21 +36,34 @@ function createAssistant({
         event.senderFrame !== win.webContents.mainFrame || !sameOrigin(event.senderFrame.url, server) ||
         new URL(event.senderFrame.url).pathname !== '/desktop-assistant') throw new Error('Access denied.');
   }
+  function ignorePointer(value) {
+    if (pointerIgnored !== value && win && !win.isDestroyed()) { win.setIgnoreMouseEvents(value); pointerIgnored=value; }
+  }
+  function pointerPolicy() {
+    if (!win || win.isDestroyed()) return;
+    if (shaped) { ignorePointer(!regions.length); return; }
+    const point = screen.getCursorScreenPoint(), bounds = win.getBounds();
+    const x = point.x-bounds.x, y = point.y-bounds.y;
+    ignorePointer(!regions.some(r => x>=r.x && y>=r.y && x<r.x+r.width && y<r.y+r.height));
+  }
   function focusInput() {
     if (!visible || !win || win.isDestroyed()) return;
-    if (!editing) foreground.remember();
+    autoFocusPending = false;
+    if (!editing) foreground.remember(win);
     editing = true;
-    win.setFocusable(true);
-    win.setIgnoreMouseEvents(false);
-    win.show(); win.focus(); win.webContents.focus();
+    if (!win.isFocusable()) win.setFocusable(true);
+    ignorePointer(false);
+    if (!win.isVisible()) win.show();
+    const activated=foreground.activate?.(win);
+    if (activated===false) { editing=false; win.setFocusable(false); pointerPolicy(); send('passive'); return; }
+    win.focus(); win.webContents.focus();
     send('focus-input');
   }
   function releaseInput(restore = Boolean(win && !win.isDestroyed() && win.isFocused())) {
     editing = false;
     if (win && !win.isDestroyed()) {
-      win.setIgnoreMouseEvents(true);
-      win.setFocusable(false);
-      if (visible) win.showInactive();
+      if (win.isFocusable()) win.setFocusable(false);
+      pointerPolicy();
     }
     if (restore) foreground.restore();
     send('passive');
@@ -62,14 +77,15 @@ function createAssistant({
     const next = normalizeServer(getServer());
     if (win && !win.isDestroyed() && next !== server) { close(); win.destroy(); win = null; }
     const created = !win || win.isDestroyed();
-    autoFocusPending = true;
+    autoFocusPending = !visible;
     if (created) {
-      server = next; ready = false; pending = [];
+      server = next; ready = false; pending = []; regions = []; shaped = false; pointerIgnored = true; nativeShape = '';
       win = new BrowserWindow({
         ...bounds(), transparent: true, backgroundColor: '#00000000', frame: false, show: false,
         focusable: false, resizable: false, skipTaskbar: true, hasShadow: false, title: 'Metis Assistant',
         webPreferences: { partition: 'persist:metis-web', preload: path.join(__dirname,'assistant-preload.cjs'),
-          sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false }
+          sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false,
+          autoplayPolicy: 'no-user-gesture-required' }
       });
       win.setAlwaysOnTop(true, 'pop-up-menu');
       win.setContentProtection(true);
@@ -82,21 +98,28 @@ function createAssistant({
       win.webContents.on('will-navigate', navigation);
       win.webContents.on('will-redirect', navigation);
       win.on('close', event => { event.preventDefault(); close(); });
-      win.on('blur', () => { if (editing && !capturing) releaseInput(false); });
+      win.on('blur', () => {
+        clearTimeout(blurTimer);
+        blurTimer=setTimeout(()=>{if(editing&&!capturing&&win&&!win.isDestroyed()&&!(foreground.isActive?foreground.isActive(win):win.isFocused()))releaseInput(false);},100);
+      });
       win.webContents.on('render-process-gone', () => { close(); ready = false; });
       if (initialGesture) pending.push(initialGesture);
       opening = win.loadURL(new URL('/desktop-assistant',server).href).finally(() => { opening = null; });
       await opening;
     } else if (!visible) win.setBounds(bounds());
+    if (!editing) foreground.keepPassive?.(win);
     visible = true;
     // showInactive never takes foreground away from a game.
-    win.showInactive(); edges.touch();
+    if (!win.isVisible()) win.showInactive();
+    edges.touch(); pointerPolicy();
+    if (!pointerTimer) { pointerTimer=setInterval(()=>{pointerPolicy();if(!editing&&!capturing)foreground.keepPassive?.(win);},25); pointerTimer.unref?.(); }
     if (!created && initialGesture) send(initialGesture);
     send('open');
   }
   function close() {
     const restore = Boolean(editing && win && !win.isDestroyed() && win.isFocused());
     visible = false; recording = false; autoFocusPending = false; pending = [];
+    clearInterval(pointerTimer); clearTimeout(blurTimer); pointerTimer=null;
     gesture.cancel(); edges.hide(); send('cancel');
     if (win && !win.isDestroyed()) win.hide();
     releaseInput(restore);
@@ -165,13 +188,23 @@ function createAssistant({
     try {
       assertSender(event);
       if (!visible || !value || typeof value.recording !== 'boolean' || typeof value.level !== 'number' || !Number.isFinite(value.level)) return;
-      if (value.recording !== recording) { recording = value.recording; if (!recording) gesture.finish(); }
+      if (value.recording !== recording) { recording = value.recording; if (recording) gesture.started(); else gesture.finish(); }
       const allowed = ['Metis Assistant','Metis is listening','Voice is not configured','Metis is working'];
       edges.setVoiceState(recording,recording ? 'Metis is listening' : allowed.includes(value.status) ? value.status : 'Metis Assistant');
       if (recording) edges.setVoiceLevel(value.level);
     } catch { /* Ignore stale or untrusted renderers. */ }
   };
   ipcMain.on('assistant:voice',voiceListener);
+  const regionListener = (event,value) => {
+    try {
+      assertSender(event);
+      regions=interactionRegions(value,win.getContentBounds());
+      const shape=JSON.stringify(regions);
+      if (process.platform!=='darwin' && win.setShape && shape!==nativeShape) { win.setShape(regions); shaped=true; nativeShape=shape; }
+      pointerPolicy();
+    } catch { /* Stale frames and invalid layout updates have no native effect. */ }
+  };
+  ipcMain.on('assistant:regions',regionListener);
   function startHook() {
     try {
       if (process.platform === 'linux' && !process.env.DISPLAY) throw new Error('Global assistant hotkey requires an X11 desktop.');
@@ -201,7 +234,7 @@ function createAssistant({
     shortcutsChanged() { gesture.cancel(); held.clear(); edges.setCancelShortcut(bindings().cancel); send('stop'); send('shortcuts-changed'); },
     pauseShortcuts(value) { clearTimeout(shortcutCaptureTimer); shortcutsPaused=Boolean(value); gesture.cancel(); held.clear(); if(shortcutsPaused)send('stop'); if(shortcutsPaused){shortcutCaptureTimer=setTimeout(()=>{shortcutsPaused=false;},30000);shortcutCaptureTimer.unref?.();} },
     state:() => ({ hotkey:bindings().assistant, shortcuts:bindings(), defaults:shortcuts.defaults, hotkeyAvailable:hookStarted, error, editing }),
-    destroy() { close(); clearTimeout(shortcutCaptureTimer); stopHook(); for (const key of Object.keys(handlers)) ipcMain.removeHandler(key); ipcMain.removeListener('assistant:voice',voiceListener); win?.destroy(); }
+    destroy() { close(); clearTimeout(shortcutCaptureTimer); stopHook(); for (const key of Object.keys(handlers)) ipcMain.removeHandler(key); ipcMain.removeListener('assistant:voice',voiceListener); ipcMain.removeListener('assistant:regions',regionListener); win?.destroy(); }
   };
 }
 module.exports = { createAssistant };
