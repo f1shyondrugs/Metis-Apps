@@ -19,6 +19,7 @@ async function main(){
  const fixture=http.createServer((req,res)=>{res.setHeader('content-type','text/html');res.end('<h1>Own Metis drop fixture</h1><script>metisApp.onFilesDropped(p=>window.dropped=p)</script>');});
  await new Promise(resolve=>fixture.listen(0,'127.0.0.1',resolve));
  const desktop=await require(process.env.METIS_FILE_DROP_ARCHIVE?path.join(process.env.METIS_FILE_DROP_ARCHIVE,'src/main/web-window.cjs'):'../src/main/web-window.cjs').createDesktop({initialServer:'http://127.0.0.1:'+fixture.address().port});
+ if(process.env.METIS_FILE_DROP_ARCHIVE){assert.ok(require.cache[require.resolve(path.join(process.env.METIS_FILE_DROP_ARCHIVE,'src/main/web-window.cjs'))]);console.log('ACTUAL_ASAR_WEB_WINDOW_MODULE_LOADED');}
  await desktop.initialLoad;console.log('FIXTURE_WEB_READY');win=desktop.win;win.setTitle('Metis isolated Explorer drop target');
  const contents=desktop.getView().webContents;
  let payload,error;
