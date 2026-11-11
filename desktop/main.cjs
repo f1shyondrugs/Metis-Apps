@@ -577,15 +577,22 @@ if (!app.requestSingleInstanceLock()) {
   void forwardSecondInstance({
     platform: process.platform,
     ready: () => app.whenReady(),
-    permissionMode: () => loadConfig()?.permissionMode,
     isElevated,
-    elevate: () => runPowerShell(`Start-Process -FilePath ${psQuote(process.execPath)} -Verb RunAs`),
-    reportError: error => dialog.showErrorBox(APP_NAME, error.message || "Administrator access was not confirmed. Metis is still running in the background."),
+    requestActivation: () => require("./src/main/window-activation.cjs").requestWindowActivation(userDataDir),
+    reportError: () => dialog.showErrorBox(APP_NAME, "Metis is still running, but the window could not be reopened. Use Open Metis from the tray."),
     quit: () => app.quit(),
   });
 } else {
   app.on("second-instance", () => void showDesktop());
   app.on("activate", () => void showDesktop());
+  let markDesktopReady;
+  const desktopReady = new Promise(resolve => { markDesktopReady = resolve; });
+  const activationListener = process.platform === "win32"
+    ? require("./src/main/window-activation.cjs").listenForWindowActivation({
+      directory: userDataDir,
+      activate: () => desktopReady.then(() => showDesktop()),
+      onError: () => {}, // Native second-instance/tray activation remains available.
+    }) : null;
   app.whenReady().then(async () => {
     app.setAppUserModelId(process.env.METIS_DESKTOP_TEST_DATA ? "ai.metis.remoteclient.test" : "ai.metis.remoteclient");
     try { config = loadConfig(); } catch (error) { status.error = error.message; }
@@ -645,6 +652,7 @@ if (!app.requestSingleInstanceLock()) {
     updateTray();
     void getAutostart();
     await showDesktop();
+    markDesktopReady();
     if (config) {
       try { await startRuntime(); } catch (error) {
         status.connection = "error";
@@ -656,6 +664,7 @@ if (!app.requestSingleInstanceLock()) {
     // Device permissions are requested from local settings when explicitly needed.
   });
   app.on("before-quit", () => {
+    activationListener?.close();
     quitting = true;
     computerUseOverlay?.hide();
     assistant?.destroy();

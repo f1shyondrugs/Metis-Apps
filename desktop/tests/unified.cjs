@@ -124,6 +124,42 @@ async function main() {
     assert.equal(authentications,1);
   }
   console.log('REAL_SECOND_PROCESS_REOPENS_SAME_WINDOW_AND_PRESERVES_CONNECTION_OK');
+  const activation=require('../src/main/window-activation.cjs');
+  const testListener=process.platform==='win32'?null:activation.listenForWindowActivation({directory,activate:()=>api.showDesktop()});
+  try{
+    desktop.win.close();assert.equal(desktop.win.isVisible(),false);
+    // This channel has only one effect: show the same window. Its contents are
+    // deliberately not trusted as commands or navigation parameters.
+    fs.writeFileSync(path.join(directory,activation.REQUEST_FILE),'ignored untrusted contents');
+    await waitFor(()=>desktop.win.isVisible());
+    assert.equal(api.getDesktop(),desktop);assert.equal(desktop.getView().webContents,remote);
+    await command('activation-signal');assert.equal(authentications,1);
+    console.log('FIXED_PROFILE_SIGNAL_REOPENS_SAME_WINDOW_WITHOUT_ELEVATION_OK');
+    if(process.platform==='win32'&&permissionMode==='admin'){
+      const {promisify}=require('node:util'),{execFile}=require('node:child_process');
+      const ps=script=>promisify(execFile)('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{windowsHide:true,timeout:20000});
+      const quote=value=>"'"+value.replace(/'/g,"''")+"'";
+      const taskName='Metis activation test '+path.basename(directory);
+      const scriptFile=path.join(directory,'request-as-user.ps1'),proofFile=path.join(directory,'request-as-user.json'),requestFile=path.join(directory,activation.REQUEST_FILE);
+      fs.rmSync(requestFile,{force:true});
+      fs.writeFileSync(scriptFile,[
+        "$ErrorActionPreference='Stop'",
+        "$principal=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())",
+        "@{elevated=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)} | ConvertTo-Json | Set-Content -LiteralPath "+quote(proofFile),
+        "[IO.File]::WriteAllText("+quote(requestFile)+",'show')"
+      ].join('\n'));
+      desktop.win.close();assert.equal(desktop.win.isVisible(),false);
+      try{
+        await ps("$action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "+quote('-NoProfile -ExecutionPolicy Bypass -File "'+scriptFile+'"')+
+          ";$p=New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited"+
+          ";Register-ScheduledTask -TaskName "+quote(taskName)+" -Action $action -Principal $p -Force | Out-Null;Start-ScheduledTask -TaskName "+quote(taskName));
+        await waitFor(()=>desktop.win.isVisible()&&fs.existsSync(proofFile));
+        assert.equal(JSON.parse(fs.readFileSync(proofFile,'utf8').replace(/^\uFEFF/,'')).elevated,false);
+        assert.equal(api.getDesktop(),desktop);assert.equal(api.getRuntimePid()>0,true);assert.equal(authentications,1);
+        console.log('WINDOWS_MEDIUM_TO_ELEVATED_SHOW_WITHOUT_RUNAS_OR_UAC_OK');
+      }finally{await ps("Unregister-ScheduledTask -TaskName "+quote(taskName)+" -Confirm:$false -ErrorAction SilentlyContinue");}
+    }
+  }finally{testListener?.close();}
   if (process.platform === 'darwin') {
     const { utilityProcess } = require('electron');
     const { startDeviceHost } = require('../src/device/runtime.cjs');
