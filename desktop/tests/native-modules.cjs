@@ -8,7 +8,8 @@ const timeout=setTimeout(()=>app.exit(1),20000);
 let hook;
 async function main(){
  await app.whenReady();
- const koffi=require('koffi'),{uIOhook}=require('uiohook-napi');
+ const req=process.env.METIS_NATIVE_TEST_ARCHIVE?require('node:module').createRequire(path.resolve(process.env.METIS_NATIVE_TEST_ARCHIVE,'package.json')):require;
+ const koffi=req('koffi'),{uIOhook}=req('uiohook-napi');
  assert.equal(typeof uIOhook.start,'function');
  const win=process.platform==='win32';
  const lib=koffi.load(win?'kernel32.dll':process.platform==='darwin'?'/usr/lib/libSystem.B.dylib':'libc.so.6');

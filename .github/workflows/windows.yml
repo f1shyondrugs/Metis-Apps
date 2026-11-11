@@ -54,6 +54,11 @@ jobs:
           if [ '${{ matrix.platform }}' = linux ]; then xvfb-run -a npm run test:e2e --prefix desktop; else npm run test:e2e --prefix desktop; fi
       - name: Build desktop installer
         run: npm run ${{ matrix.command }} --prefix desktop -- --publish never
+      - name: Verify packaged Linux native modules
+        if: matrix.platform == 'linux'
+        env:
+          METIS_NATIVE_TEST_ARCHIVE: ${{ github.workspace }}/desktop/dist/linux-unpacked/resources/app.asar
+        run: xvfb-run -a desktop/node_modules/.bin/electron desktop/tests/native-modules.cjs
       - name: Verify Windows install, background operation and uninstall
         if: matrix.platform == 'windows'
         shell: pwsh
