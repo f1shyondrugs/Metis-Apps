@@ -1,6 +1,6 @@
 // Actual Electron window, sandbox, native monitor capture and origin guards.
 // This test never uses an account or submits real user screenshots to a server.
-const {app,BrowserWindow,screen,session}=require('electron');
+const {app,BrowserWindow,screen,session,ipcMain}=require('electron');
 app.disableHardwareAcceleration();
 app.setName('Metis Assistant Test');app.setAppUserModelId('ai.metis.assistant.test');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),http=require('node:http');
@@ -38,6 +38,17 @@ async function main(){
  // Explicit focus changes are not overridden by later settings refreshes.
  assert.equal(win.isFocusable(),false);
  console.log('ASSISTANT_PASSIVE_AND_EXPLICIT_INPUT_MODE_OK');
+ let measured=[];
+ const measure=(_event,value)=>{if(_event.sender===wc)measured=value.rects;};
+ ipcMain.on('assistant:regions',measure);
+ await wc.executeJavaScript(`document.body.insertAdjacentHTML('beforeend','<section id="test-pane" class="assistant-input" style="position:fixed;left:10px;top:20px;width:80px;height:40px"></section><div id="test-hidden" data-slot="popover-content" style="display:none;width:140px;height:100px"></div><div id="test-popup" data-slot="popover-content" style="position:fixed;left:120px;top:80px;width:140px;height:100px"></div>')`);
+ await until(()=>measured.length===2&&measured.some(r=>r.x===120&&r.y===80&&r.width===140));
+ await wc.executeJavaScript('document.querySelector("#test-popup").style.left="160px"');
+ await until(()=>measured.some(r=>r.x===160&&r.y===80&&r.width===140));
+ assert.equal(measured.length,2,'Hidden popovers do not consume native hit regions');
+ await wc.executeJavaScript('for(const id of ["test-pane","test-hidden","test-popup"])document.getElementById(id).remove()');
+ ipcMain.removeListener('assistant:regions',measure);
+ console.log('ASSISTANT_PORTALED_POPOVER_GEOMETRY_AND_REPOSITION_OK');
  assistant.close(); await assistant.open();
  await wc.executeJavaScript('metisAssistant.configure({voiceConfigured:false,chatId:"fixture-chat"})');
  assert.equal(win.isFocusable(),true);

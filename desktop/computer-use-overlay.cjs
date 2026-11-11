@@ -93,12 +93,13 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
   }
   function draw() {
     const phase=elapsed/1800, tau=2*Math.PI;
-    smoothLevel = reduced.matches ? 0 : smoothLevel+(voiceLevel-smoothLevel)*.16;
+    smoothLevel = reduced.matches ? 0 : smoothLevel+(voiceLevel-smoothLevel)*(voiceLevel>smoothLevel?.28:.1);
+    const response=OVERLAY_AUDIO_REACTIVE?Math.pow(smoothLevel,.7):0;
     const progress=reduced.matches?1:1-Math.pow(1-Math.min(1,(performance.now()-enteredAt)/720),3);
     const moved=points.map(p=>{
       // Integer harmonics close seamlessly at the first/last sample.
-      const strength=1+smoothLevel;
-      const displacement=(3*Math.sin(tau*waves*p.t-phase)+1.5*Math.sin(tau*(waves+3)*p.t+phase*.7))*strength+smoothLevel*4-(1-progress)*100;
+      const strength=1+response*5;
+      const displacement=(3*Math.sin(tau*waves*p.t-phase)+1.5*Math.sin(tau*(waves+3)*p.t+phase*.7))*strength+response*18-(1-progress)*100;
       return {x:p.x+p.nx*displacement,y:p.y+p.ny*displacement};
     });
     const pair=p=>p.x.toFixed(2)+" "+p.y.toFixed(2);
@@ -129,6 +130,7 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
 </script></body>
 </html>`
     .replace("OVERLAY_VOICE_MODE",()=>String(mode === "voice"))
+    .replace("OVERLAY_AUDIO_REACTIVE",()=>String(mode === "voice"))
     .replace("OVERLAY_EDGES",edgeHtml)
     .replaceAll("OVERLAY_KEY",keyLabel)
     .replace("OVERLAY_CURSOR",()=>"<svg class=\"cursor\" aria-hidden=\"true\" viewBox=\"0 0 52 48\"><defs><linearGradient id=\"metis-browser-cursor-glass\" x1=\"7\" y1=\"4\" x2=\"39\" y2=\"42\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-color=\"rgba(42,55,63,0.72)\"/><stop offset=\".44\" stop-color=\"rgba(18,28,34,0.54)\"/><stop offset=\"1\" stop-color=\"rgba(6,11,15,0.34)\"/></linearGradient><linearGradient id=\"metis-browser-cursor-edge\" x1=\"3\" y1=\"4\" x2=\"40\" y2=\"43\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-color=\"rgba(255,255,255,0.96)\"/><stop offset=\".34\" stop-color=\"rgba(191,232,241,.78)\"/><stop offset=\".7\" stop-color=\"rgba(117,166,180,.58)\"/><stop offset=\"1\" stop-color=\"rgba(238,247,250,.84)\"/></linearGradient><radialGradient id=\"metis-browser-cursor-glow\" cx=\"0\" cy=\"0\" r=\"1\" gradientTransform=\"translate(15 12) rotate(34) scale(31 24)\" gradientUnits=\"userSpaceOnUse\"><stop stop-color=\"rgba(224,248,255,.3)\"/><stop offset=\"1\" stop-color=\"rgba(224,248,255,0)\"/></radialGradient></defs><path d=\"M7.1 4.15C4.05 3.4 1.72 6.15 2.8 9.08l13.35 33.55c1.04 2.78 4.82 3.08 6.28.48l7.35-17.38c1.1-2.57 3.2-4.55 5.83-5.51l12.78-4.7c3.46-1.27 3.46-6.17-.03-7.39L7.1 4.15Z\" fill=\"url(#metis-browser-cursor-glass)\" stroke=\"url(#metis-browser-cursor-edge)\" stroke-width=\"1.3\" stroke-linejoin=\"round\"/><path d=\"M7.35 5.8 18.02 40.9c.43 1.46 2.43 1.61 3.08.24l6.98-15.08c1.28-2.76 3.59-4.91 6.43-5.99l12.18-4.6\" fill=\"none\" stroke=\"rgba(238,252,255,.42)\" stroke-width=\".9\" stroke-linecap=\"round\"/><path d=\"M6.1 5.05 48.1 12.95 35.25 17.7 9.3 9.2Z\" fill=\"url(#metis-browser-cursor-glow)\"/></svg>")

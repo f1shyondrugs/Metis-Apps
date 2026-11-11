@@ -20,10 +20,12 @@ if (process.isMainFrame) {
   addEventListener('DOMContentLoaded', () => {
     let frame, previous = '';
     const observed = new Set();
+    const paneSelector='.assistant-input,.assistant-conversation,[data-slot="popover-content"],[data-slot="dialog-content"]';
     const resize = new ResizeObserver(() => schedule());
     function measure() {
       frame = null;
-      const panes = [...document.querySelectorAll('.assistant-input,.assistant-conversation')].slice(0,4);
+      const panes = [...document.querySelectorAll(paneSelector)]
+        .filter(node=>{const r=node.getBoundingClientRect();return r.width>0&&r.height>0;}).slice(0,4);
       for (const node of observed) if (!panes.includes(node)) { resize.unobserve(node); observed.delete(node); }
       for (const node of panes) if (!observed.has(node)) { observed.add(node); resize.observe(node); }
       const value = {width:innerWidth,height:innerHeight,rects:panes.map(node => {
@@ -34,7 +36,10 @@ if (process.isMainFrame) {
       if (text !== previous) { previous=text; ipcRenderer.send('assistant:regions',value); }
     }
     function schedule() { if (!frame) frame=requestAnimationFrame(measure); }
-    new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true});
+    new MutationObserver(records=>{
+      if(records.some(record=>record.type==='childList'||record.target.matches?.(paneSelector+',[data-radix-popper-content-wrapper]')))schedule();
+    }).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['style','data-state','hidden']});
+    addEventListener('scroll',schedule,true);
     addEventListener('resize',schedule);
     document.addEventListener('visibilitychange',schedule);
     schedule();

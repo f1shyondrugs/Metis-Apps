@@ -52,8 +52,9 @@ async function main(){
   await wc.executeJavaScript('metisVoiceState(true,"Metis is listening");metisVoiceLevel(1)');
   await pause(700);
   const loud=await band();
-  assert.ok(loud>idle+3,`Audio should visibly increase the wave: ${idle} -> ${loud}`);
-  assert.ok(loud<30,'Loud waves remain at the outer edge');
+  assert.ok(loud>idle+20,`Speech should make the wave strongly visible: ${idle} -> ${loud}`);
+  assert.ok(loud<64,'Strong voice waves stay within a bounded edge band');
+  console.log(JSON.stringify({width,height,idle,loud}));
   await wc.executeJavaScript('metisVoiceState(false,"Metis Assistant")');
   await pause(800);
   assert.equal(await wc.executeJavaScript('getComputedStyle(document.querySelector(".edge")).visibility'),'visible');
