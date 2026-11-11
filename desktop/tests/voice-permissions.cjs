@@ -41,7 +41,7 @@ async function main(){
   if(!await wc.executeJavaScript('matchMedia("(prefers-reduced-motion: reduce)").matches'))break;
   await pause(20);
  }
- const band=()=>wc.executeJavaScript('(()=>{const p=document.querySelector(".wave"),n=p.getTotalLength(),ys=[];for(let i=0;i<1000;i++){const q=p.getPointAtLength(n*i/1000);if(q.x>innerWidth*.1&&q.x<innerWidth*.9&&q.y<innerHeight*.2)ys.push(q.y)}return Math.max(...ys)})()');
+ const band=()=>wc.executeJavaScript('(()=>{const p=document.querySelector(".wave"),n=p.getTotalLength(),depths=[];for(let i=0;i<1000;i++){const q=p.getPointAtLength(n*i/1000);depths.push(Math.min(q.x,q.y,innerWidth-q.x,innerHeight-q.y))}return Math.max(...depths)})()');
  for(const [width,height] of [[390,844],[768,900],[1440,900]]){
   win.setSize(width,height);
   await wc.executeJavaScript('metisVoiceState(false,"Metis Assistant");metisVoiceLevel(0)');
@@ -53,7 +53,7 @@ async function main(){
   await pause(700);
   const loud=await band();
   assert.ok(loud>idle+20,`Speech should make the wave strongly visible: ${idle} -> ${loud}`);
-  assert.ok(loud<64,'Strong voice waves stay within a bounded edge band');
+  assert.ok(loud<64,'Strong voice waves stay within a bounded edge band: '+loud);
   console.log(JSON.stringify({width,height,idle,loud}));
   await wc.executeJavaScript('metisVoiceState(false,"Metis Assistant")');
   await pause(800);
