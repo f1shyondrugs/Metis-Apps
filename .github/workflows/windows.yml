@@ -37,12 +37,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: test "v$(node -p "require('./desktop/package.json').version")" = "${{ github.ref_name }}"
-      - name: Install Linux native hook build dependencies
-        if: matrix.platform == 'linux'
-        timeout-minutes: 5
-        run: |
-          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
-          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y libx11-dev libxrandr-dev libxtst-dev libxt-dev
+      # Native dependencies include Node-API prebuilds. Electron tests below load
+      # the shipped bindings and start the Linux hook in the isolated Xvfb display.
       - name: Install dependencies
         run: npm ci --prefix desktop
       - name: Generate icons from the canonical Metis M
