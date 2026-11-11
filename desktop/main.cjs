@@ -573,7 +573,16 @@ function setupUpdates() {
 }
 
 if (!app.requestSingleInstanceLock()) {
-  app.quit();
+  const { forwardSecondInstance } = require("./src/main/reopen.cjs");
+  void forwardSecondInstance({
+    platform: process.platform,
+    ready: () => app.whenReady(),
+    permissionMode: () => loadConfig()?.permissionMode,
+    isElevated,
+    elevate: () => runPowerShell(`Start-Process -FilePath ${psQuote(process.execPath)} -Verb RunAs`),
+    reportError: error => dialog.showErrorBox(APP_NAME, error.message || "Administrator access was not confirmed. Metis is still running in the background."),
+    quit: () => app.quit(),
+  });
 } else {
   app.on("second-instance", () => void showDesktop());
   app.on("activate", () => void showDesktop());

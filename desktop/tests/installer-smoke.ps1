@@ -36,6 +36,18 @@ if (-not $process.CloseMainWindow()) { throw 'Could not close the test app windo
 Start-Sleep -Milliseconds 500
 $process.Refresh()
 if ($process.HasExited) { throw 'Closing the main window stopped background operation.' }
+$originalPid=$process.Id
+$second=Start-Process -FilePath $exe -PassThru
+$deadline=(Get-Date).AddSeconds(20)
+do{
+ Start-Sleep -Milliseconds 250
+ $process.Refresh()
+}until($process.MainWindowHandle -ne 0 -or (Get-Date) -gt $deadline)
+if($process.MainWindowHandle -eq 0 -or $process.HasExited){throw 'Launching the installed app again did not reopen its existing window.'}
+if(!$second.WaitForExit(15000)){throw 'Second launcher did not exit.'}
+if($second.ExitCode -ne 0){throw 'Second launcher failed.'}
+if($process.Id -ne $originalPid){throw 'Reopening replaced the background process.'}
+Write-Output 'WINDOWS_INSTALLED_CLOSE_AND_SECOND_LAUNCH_REOPEN_OK'
 Stop-Process -Id $process.Id
 Write-Output 'WINDOWS_BACKGROUND_CLOSE_OK'
 if ($entries[0].UninstallString -notmatch '^"([^"]+)"') { throw 'Registered uninstall command is invalid.' }

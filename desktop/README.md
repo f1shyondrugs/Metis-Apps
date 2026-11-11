@@ -6,6 +6,8 @@ A single Electron app for Windows, macOS Apple Silicon and Linux x64. The app co
 
 The main window opens Metis. **Metis → Change server** selects your server; **Metis → Device settings** (Ctrl/Cmd+Shift+D) opens local device pairing, command history and settings. The tray offers both windows. Closing windows hides them while the connection remains available. **Quit** exits the app and disconnects the device.
 
+Open the app again from its shortcut to restore the existing window after closing it with X. For a device paired with administrator access, Windows may ask for administrator confirmation again when forwarding a normal shortcut launch to the elevated background instance. Cancelling that prompt leaves the existing connection running; user-mode devices never elevate.
+
 Signing into the website does not pair your computer. Pair separately in **Device settings** with the code from Metis Settings → Devices. Pairing does not sign into the website. Device permissions remain managed by the server and the operating system. Microphone approval is remembered per server on this device and shared by the main web window and assistant, including after an app restart. Camera access is a separate approval; operating-system permissions still apply.
 
 ## Desktop Assistant

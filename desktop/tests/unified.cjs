@@ -109,6 +109,21 @@ async function main() {
   await api.showDesktop();
   assert.equal(desktop.win.isVisible(), true);
   console.log('BACKGROUND_CONNECTION_SURVIVES_RELOAD_AND_CLOSE_OK');
+  const {spawn}=require('node:child_process');
+  for(let cycle=0;cycle<2;cycle++){
+    desktop.win.close();
+    assert.equal(desktop.win.isVisible(),false);
+    const args=[...(process.platform==='linux'&&process.getuid?.()===0?['--no-sandbox']:[]),path.join(__dirname,'..')];
+    const second=spawn(process.execPath,args,{env:{...process.env,METIS_DESKTOP_TEST_DATA:directory},stdio:'ignore'});
+    const exited=new Promise((resolve,reject)=>{second.once('error',reject);second.once('exit',code=>code===0?resolve():reject(Error('Second launcher exit '+code)));});
+    await waitFor(()=>desktop.win.isVisible());
+    await exited;
+    assert.equal(api.getDesktop(),desktop);
+    assert.equal(desktop.getView().webContents,remote);
+    await command('second-launch-'+cycle);
+    assert.equal(authentications,1);
+  }
+  console.log('REAL_SECOND_PROCESS_REOPENS_SAME_WINDOW_AND_PRESERVES_CONNECTION_OK');
   if (process.platform === 'darwin') {
     const { utilityProcess } = require('electron');
     const { startDeviceHost } = require('../src/device/runtime.cjs');
