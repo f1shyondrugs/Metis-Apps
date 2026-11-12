@@ -27,6 +27,10 @@ async function run(){
  assert.equal(await local.executeJavaScript('document.querySelector("footer").textContent.trim()'),"");
  assert.deepEqual(await local.executeJavaScript('Array.from(document.querySelectorAll("button")).filter(el=>el.getClientRects().length).map(el=>el.textContent.trim())'),["Continue"]);
  console.log("NATIVE_ONLY_CONTINUE_AND_NO_FOOTER_TEXT_OK");
+ assert.equal(await local.executeJavaScript('getComputedStyle(document.querySelector("#motion svg")).color'),"rgb(255, 255, 255)");
+ assert.equal(await local.executeJavaScript('document.querySelector("#motion svg [data-onboarding-geometry]").getAttribute("stroke")'),"none");
+ assert.equal(await local.executeJavaScript('document.querySelectorAll("#motion svg > g > rect").length'),1);
+ console.log("WHITE_DOTS_ONLY_WITHOUT_CONTINUOUS_BORDER_OK");
  const before=await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")');
  await new Promise(resolve=>setTimeout(resolve,120));const after=await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")');if(process.env.METIS_ONBOARDING_REDUCED==="1"){assert.equal(before,after);assert.equal(await local.executeJavaScript('getComputedStyle(document.querySelector(".content")).animationName'),"none");console.log("ONBOARDING_REDUCED_MOTION_STATIC_OK");}else assert.notEqual(before,after);
  fs.mkdirSync(path.join(__dirname,"..","test-results"),{recursive:true});fs.writeFileSync(path.join(__dirname,"..","test-results","onboarding-welcome.png"),(await local.capturePage()).toPNG());
