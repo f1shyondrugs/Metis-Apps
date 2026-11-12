@@ -12,7 +12,7 @@ function render(state){
  byId("server-label").textContent=state.mode==="welcome"?"":state.server;
  byId("heading").textContent=state.mode==="welcome"?"Welcome to Metis.":state.mode==="settings"?"Connect to your Metis.":state.mode==="error"?"Connection interrupted.":"Opening your workspace.";
  byId("description").textContent=state.mode==="welcome"?"Connect. Sign in. Make it yours.":state.mode==="settings"?"Enter your Metis server address.":state.mode==="error"?state.message:"Sign-in or first-time setup opens next.";
- byId("back").textContent=state.firstRun?"Back":"Cancel";
+ byId("back").textContent="Back";
  for(const li of document.querySelectorAll("#progress li")){li.removeAttribute("aria-current");if(li.dataset.step===(["error","ready"].includes(state.mode)?"loading":state.mode))li.setAttribute("aria-current","step");}
  if(state.mode==="settings"&&previous?.mode!=="settings"){byId("server").value=state.server;byId("validation").textContent="";byId("server").focus();}
 }

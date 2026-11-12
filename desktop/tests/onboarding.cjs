@@ -24,6 +24,9 @@ async function run(){
  assert.equal(await local.executeJavaScript('getComputedStyle(document.documentElement).getPropertyValue("--primary").trim()'),"#fff");
  assert.equal(await local.executeJavaScript('document.querySelectorAll(".features svg[aria-hidden=true]").length'),3);
  console.log("MINIMAL_NATIVE_BLACK_WHITE_AND_ICONS_OK");
+ assert.equal(await local.executeJavaScript('document.querySelector("footer").textContent.trim()'),"");
+ assert.deepEqual(await local.executeJavaScript('Array.from(document.querySelectorAll("button")).filter(el=>el.getClientRects().length).map(el=>el.textContent.trim())'),["Continue"]);
+ console.log("NATIVE_ONLY_CONTINUE_AND_NO_FOOTER_TEXT_OK");
  const before=await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")');
  await new Promise(resolve=>setTimeout(resolve,120));const after=await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")');if(process.env.METIS_ONBOARDING_REDUCED==="1"){assert.equal(before,after);assert.equal(await local.executeJavaScript('getComputedStyle(document.querySelector(".content")).animationName'),"none");console.log("ONBOARDING_REDUCED_MOTION_STATIC_OK");}else assert.notEqual(before,after);
  fs.mkdirSync(path.join(__dirname,"..","test-results"),{recursive:true});fs.writeFileSync(path.join(__dirname,"..","test-results","onboarding-welcome.png"),(await local.capturePage()).toPNG());
