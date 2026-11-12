@@ -11,7 +11,7 @@ function render(state){
  byId("retry").hidden=state.mode==="loading";
  byId("server-label").textContent=state.mode==="welcome"?"":state.server;
  byId("heading").textContent=state.mode==="welcome"?"Welcome to Metis.":state.mode==="settings"?"Connect to your Metis.":state.mode==="error"?"Connection interrupted.":"Opening your workspace.";
- byId("description").textContent=state.mode==="welcome"?"A short setup for this desktop. Connect your server, sign in and choose the features you want.":state.mode==="settings"?"Enter the domain of your Metis installation. We will open sign-in or, for a fresh server, its first-time setup.":state.mode==="error"?state.message:"The next step is provided by your server: sign in, or create the first account if the installation is new.";
+ byId("description").textContent=state.mode==="welcome"?"Connect. Sign in. Make it yours.":state.mode==="settings"?"Enter your Metis server address.":state.mode==="error"?state.message:"Sign-in or first-time setup opens next.";
  byId("back").textContent=state.firstRun?"Back":"Cancel";
  for(const li of document.querySelectorAll("#progress li")){li.removeAttribute("aria-current");if(li.dataset.step===(["error","ready"].includes(state.mode)?"loading":state.mode))li.setAttribute("aria-current","step");}
  if(state.mode==="settings"&&previous?.mode!=="settings"){byId("server").value=state.server;byId("validation").textContent="";byId("server").focus();}
