@@ -22,6 +22,7 @@ function launchStandard(executable,args,{env=process.env,cwd=process.cwd()}={}){
   const environment=wide(Object.entries(env).sort(([a],[b])=>a.localeCompare(b)).map(([key,value])=>key+'='+value).join('\0')+'\0');
   const command=wide([executable,...args].map(value=>'"'+value.replace(/"/g,'')+'"').join(' '));
   if(!create(ptr(restricted),wide(executable),command,null,null,true,0x400,environment,wide(cwd),startup,result))throw Error('Test standard launch '+last());
+  desktop.fill(0); // Keep lpDesktop's backing Buffer live across the native call.
   close(Number(result.readBigUInt64LE(8)));
   // Give only this isolated test process normal foreground eligibility. A High
   // CI console is not a user click and otherwise blocks Medium focus tests.
