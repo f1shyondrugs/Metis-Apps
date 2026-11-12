@@ -34,9 +34,13 @@ async function run(){
  const logoInfo=await local.executeJavaScript('(async()=>{const el=document.querySelector(".metis-wordmark"),image=new Image();image.src=new URL("../assets/metis-wordmark.svg",location.href).href;await image.decode();const r=el.getBoundingClientRect();return {label:el.getAttribute("aria-label"),mask:getComputedStyle(el).maskImage,width:r.width,height:r.height,x:r.x,y:r.y,naturalWidth:image.naturalWidth};})()');
  assert.equal(logoInfo.label,"Metis");assert.ok(logoInfo.mask.includes("metis-wordmark.svg"));assert.equal(logoInfo.width,108);assert.equal(logoInfo.height,32);assert.ok(logoInfo.naturalWidth>0);
  await local.executeJavaScript("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
- const logoImage=await local.capturePage({x:Math.floor(logoInfo.x),y:Math.floor(logoInfo.y),width:108,height:32}),logoBytes=logoImage.getBitmap();
- let logoPaint=0;for(let i=0;i<logoBytes.length;i+=4)if(logoBytes[i]>180)logoPaint++;
- assert.ok(logoPaint>80&&logoPaint<2000,"Canonical vector wordmark must paint as glyphs, not a blank or solid rectangle");
+ let logoPaint=0,logoPixels=0;
+ await wait(async()=>{
+  const logoImage=await local.capturePage({x:Math.floor(logoInfo.x),y:Math.floor(logoInfo.y),width:108,height:32}),bytes=logoImage.getBitmap();
+  logoPaint=0;logoPixels=bytes.length/4;for(let i=0;i<bytes.length;i+=4)if(bytes[i]>180)logoPaint++;
+  return logoPaint>80&&logoPaint<2000;
+ });
+ assert.ok(logoPaint>80&&logoPaint<2000,`Canonical vector wordmark must paint as glyphs, not a blank or solid rectangle: ${logoPaint}/${logoPixels}`);
  const originalSize=desktop.win.getContentSize(),originalMinimum=desktop.win.getMinimumSize();
  // Isolated test window only: exercise CSS at mobile width without changing product window constraints.
  desktop.win.setMinimumSize(0,0);
