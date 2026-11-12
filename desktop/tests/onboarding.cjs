@@ -43,14 +43,18 @@ async function run(){
  });
  assert.ok(logoPaint>80&&logoPaint<2000,`Canonical vector wordmark must paint as glyphs, not a blank or solid rectangle: ${logoPaint}/${logoPixels}`);
  const originalSize=desktop.win.getContentSize(),originalMinimum=desktop.win.getMinimumSize();
- // Isolated test window only: exercise CSS at mobile width without changing product window constraints.
+ // Test-only viewport emulation on macOS: AppKit constrains physical window resizing.
+ // Other platforms exercise the actual isolated window. Product constraints stay unchanged.
  desktop.win.setMinimumSize(0,0);
  for(const width of [390,768,1440]){
-  desktop.win.setContentSize(width,width===390?844:1000);await wait(()=>local.executeJavaScript("innerWidth==="+width));await new Promise(resolve=>setTimeout(resolve,100));
+  if(process.platform==="darwin")local.enableDeviceEmulation({screenPosition:"desktop",screenSize:{width,height:1000},viewPosition:{x:0,y:0},viewSize:{width,height:width===390?844:1000},deviceScaleFactor:1,scale:1});
+  else desktop.win.setContentSize(width,width===390?844:1000);
+  await wait(()=>local.executeJavaScript("innerWidth==="+width));await new Promise(resolve=>setTimeout(resolve,100));
   const layout=await local.executeJavaScript('({overflow:document.documentElement.scrollWidth>innerWidth+1,width:document.querySelector(".metis-wordmark").getBoundingClientRect().width})');
   assert.equal(layout.overflow,false);assert.equal(layout.width,108);
   assert.equal(await local.executeJavaScript('(()=>{const b=document.getElementById("begin").getBoundingClientRect(),p=document.getElementById("progress").getBoundingClientRect(),f=document.querySelector("footer").getBoundingClientRect();return Math.abs(p.top+p.height/2-b.top-b.height/2)<2&&Math.abs(b.right-f.right)<2&&p.right<b.left})()'),true);console.log("WORDMARK_RESPONSIVE_OK",width);
  }
+ if(process.platform==="darwin")local.disableDeviceEmulation();
  desktop.win.setMinimumSize(...originalMinimum);desktop.win.setContentSize(...originalSize);await wait(()=>local.executeJavaScript("innerWidth==="+originalSize[0]));await new Promise(resolve=>setTimeout(resolve,100));
  console.log("CANONICAL_WEB_WORDMARK_DECODED_AND_PAINTED_OK",logoPaint);
  assert.equal(await local.executeJavaScript('document.getElementById("heading").textContent'),"Welcome to Metis.");
