@@ -7,7 +7,7 @@ app.on("window-all-closed",()=>{});
 app.setPath("userData",root);app.setName("Metis onboarding test");app.setAppUserModelId("ai.metis.onboarding.test");
 const {createDesktop}=require("../src/main/web-window.cjs");
 const wait=async predicate=>{for(let i=0;i<200;i++){if(await predicate())return;await new Promise(resolve=>setTimeout(resolve,40));}throw Error("Onboarding wait timed out");};
-let desktop,fixture,foreign;
+let desktop,fixture,foreign,initialRequests=0;
 async function captureSeries(contents,name,count=14){
  if(process.env.METIS_CAPTURE_ONBOARDING_MOTION!=="1")return;
  const folder=path.join(__dirname,"..","test-results","transition-media");fs.mkdirSync(folder,{recursive:true});
@@ -17,12 +17,13 @@ async function captureSeries(contents,name,count=14){
 const timeout=setTimeout(()=>{console.error("ONBOARDING_TIMEOUT");app.exit(1);},60000);
 async function run(){
  await app.whenReady();
- fixture=http.createServer((req,res)=>{res.setHeader("Content-Type","text/html");res.end(req.url==="/frame"?"<p>Untrusted child</p>":'<!doctype html><title>Fresh Metis fixture</title><h1>Fresh Metis server setup</h1><p id="setup">Create the first account</p><iframe src="/frame"></iframe>');});
+ fixture=http.createServer((req,res)=>{if(req.url==="/")initialRequests++;res.setHeader("Content-Type","text/html");res.end(req.url==="/frame"?"<p>Untrusted child</p>":'<!doctype html><title>Fresh Metis fixture</title><h1>Fresh Metis server setup</h1><p id="setup">Create the first account</p><iframe src="/frame"></iframe>');});
  await new Promise(resolve=>fixture.listen(0,"127.0.0.1",resolve));const server="http://127.0.0.1:"+fixture.address().port+"/";
  let permissionCalls=0;
  desktop=await createDesktop({onDesktopPermissions:async()=>{permissionCalls++;return {available:false,reason:"Synthetic OS status"};}});
  await desktop.initialLoad;
  assert.equal(desktop.getState().mode,"welcome");assert.equal(desktop.getView(),undefined);
+ assert.equal(desktop.win.isMenuBarVisible(),false);console.log("FRAMELESS_NATIVE_SPLASH_OK");
  const local=desktop.win.webContents;
  await wait(()=>local.executeJavaScript('Boolean(document.querySelector("#motion svg path"))'));
  await captureSeries(local,"intro");
@@ -32,6 +33,7 @@ async function run(){
  assert.ok(require("../package.json").build.files.includes("assets/metis-wordmark.svg"));
  const logoInfo=await local.executeJavaScript('(async()=>{const el=document.querySelector(".metis-wordmark"),image=new Image();image.src=new URL("../assets/metis-wordmark.svg",location.href).href;await image.decode();const r=el.getBoundingClientRect();return {label:el.getAttribute("aria-label"),mask:getComputedStyle(el).maskImage,width:r.width,height:r.height,x:r.x,y:r.y,naturalWidth:image.naturalWidth};})()');
  assert.equal(logoInfo.label,"Metis");assert.ok(logoInfo.mask.includes("metis-wordmark.svg"));assert.equal(logoInfo.width,108);assert.equal(logoInfo.height,32);assert.ok(logoInfo.naturalWidth>0);
+ await local.executeJavaScript("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
  const logoImage=await local.capturePage({x:Math.floor(logoInfo.x),y:Math.floor(logoInfo.y),width:108,height:32}),logoBytes=logoImage.getBitmap();
  let logoPaint=0;for(let i=0;i<logoBytes.length;i+=4)if(logoBytes[i]>180)logoPaint++;
  assert.ok(logoPaint>80&&logoPaint<2000,"Canonical vector wordmark must paint as glyphs, not a blank or solid rectangle");
@@ -41,16 +43,18 @@ async function run(){
  for(const width of [390,768,1440]){
   desktop.win.setContentSize(width,width===390?844:1000);await wait(()=>local.executeJavaScript("innerWidth==="+width));await new Promise(resolve=>setTimeout(resolve,100));
   const layout=await local.executeJavaScript('({overflow:document.documentElement.scrollWidth>innerWidth+1,width:document.querySelector(".metis-wordmark").getBoundingClientRect().width})');
-  assert.equal(layout.overflow,false);assert.equal(layout.width,108);console.log("WORDMARK_RESPONSIVE_OK",width);
+  assert.equal(layout.overflow,false);assert.equal(layout.width,108);
+  assert.equal(await local.executeJavaScript('(()=>{const b=document.getElementById("begin").getBoundingClientRect(),p=document.getElementById("progress").getBoundingClientRect(),f=document.querySelector("footer").getBoundingClientRect();return Math.abs(p.top+p.height/2-b.top-b.height/2)<2&&Math.abs(b.right-f.right)<2&&p.right<b.left})()'),true);console.log("WORDMARK_RESPONSIVE_OK",width);
  }
  desktop.win.setMinimumSize(...originalMinimum);desktop.win.setContentSize(...originalSize);await wait(()=>local.executeJavaScript("innerWidth==="+originalSize[0]));await new Promise(resolve=>setTimeout(resolve,100));
  console.log("CANONICAL_WEB_WORDMARK_DECODED_AND_PAINTED_OK",logoPaint);
  assert.equal(await local.executeJavaScript('document.getElementById("heading").textContent'),"Welcome to Metis.");
  assert.equal(await local.executeJavaScript('getComputedStyle(document.documentElement).backgroundColor'),"rgb(0, 0, 0)");
  assert.equal(await local.executeJavaScript('getComputedStyle(document.documentElement).getPropertyValue("--primary").trim()'),"#fff");
- assert.equal(await local.executeJavaScript('document.querySelectorAll(".features svg[aria-hidden=true]").length'),3);
+ assert.equal(await local.executeJavaScript('document.querySelectorAll(".features,.brand").length'),0);
  console.log("MINIMAL_NATIVE_BLACK_WHITE_AND_ICONS_OK");
- assert.equal(await local.executeJavaScript('document.querySelector("footer").textContent.trim()'),"");
+ assert.equal(await local.executeJavaScript('document.querySelector("footer").innerText.trim()'),"Continue");
+ assert.equal(await local.executeJavaScript('(()=>{const b=document.getElementById("begin").getBoundingClientRect(),p=document.getElementById("progress").getBoundingClientRect(),f=document.querySelector("footer").getBoundingClientRect();return Math.abs((p.top+p.height/2)-(b.top+b.height/2))<2&&Math.abs(b.right-f.right)<2&&p.right<b.left})()'),true);console.log("NATIVE_CONTINUE_AND_DOTS_SAME_FOOTER_ROW_OK");
  assert.deepEqual(await local.executeJavaScript('Array.from(document.querySelectorAll("button")).filter(el=>el.getClientRects().length).map(el=>el.textContent.trim())'),["Continue"]);
  console.log("NATIVE_ONLY_CONTINUE_AND_NO_FOOTER_TEXT_OK");
  assert.equal(await local.executeJavaScript('getComputedStyle(document.querySelector("#motion svg")).color'),"rgb(255, 255, 255)");
@@ -72,14 +76,15 @@ async function run(){
  fs.mkdirSync(path.join(__dirname,"..","test-results"),{recursive:true});fs.writeFileSync(path.join(__dirname,"..","test-results","onboarding-welcome.png"),(await local.capturePage()).toPNG());
  await local.executeJavaScript('document.getElementById("begin").click()');await wait(()=>desktop.getState().mode==="settings");
  await captureSeries(local,"step");
- await wait(()=>local.executeJavaScript('document.getElementById("form").hidden===false'));
+ await wait(()=>desktop.win.webContents.executeJavaScript('document.getElementById("form").hidden===false'));
  assert.equal(await local.executeJavaScript('document.activeElement.id'),"server");
  console.log("NATIVE_FADE_STEP_AND_INPUT_FOCUS_OK");
  const invalid=await local.executeJavaScript('metisDesktop.connect("https://user:password@example.invalid/")');assert.equal(invalid.ok,false);
- const ok=await local.executeJavaScript("metisDesktop.connect("+JSON.stringify(server)+")");assert.equal(ok.ok,true);
+ assert.equal(await local.executeJavaScript('document.getElementById("connect").form===document.getElementById("form")'),true);
+ await local.executeJavaScript('document.getElementById("server").value='+JSON.stringify(server)+';document.getElementById("connect").click()');
  await wait(()=>desktop.getState().mode==="ready");
- assert.equal(await local.executeJavaScript('Boolean(document.querySelector("#motion svg"))'),false,"Covered launcher must stop its animation");
- let contents=desktop.getView().webContents;
+ assert.equal(local.isDestroyed(),true,"Retired splash must be destroyed after handoff");assert.equal(desktop.win.isMenuBarVisible(),true);console.log("FRAMED_WORKSPACE_HANDOFF_WITHOUT_VIEW_RELOAD_OK");
+ assert.equal(initialRequests,1,"Framing handoff must not reload the server page");let contents=desktop.getView().webContents;
  assert.match(await contents.executeJavaScript("document.body.textContent"),/Fresh Metis server setup/);
  const context=await contents.executeJavaScript("metisApp.onboardingContext()");
  assert.match(context.installationId,/^[a-f0-9-]{36}$/);assert.equal(context.server,server);assert.deepEqual(Object.keys(context).sort(),["installationId","server"]);
@@ -89,8 +94,8 @@ async function run(){
  console.log("FRESH_DESKTOP_DOMAIN_AND_SERVER_SETUP_OK");
  // Opening settings intentionally destroys this remote WebContents. Observe the surviving owner, not its evaluation reply.
  void contents.executeJavaScript("metisApp.openServerSettings()").catch(()=>{});await wait(()=>desktop.getState().mode==="settings");
- await wait(()=>local.executeJavaScript('document.getElementById("form").hidden===false'));
- assert.equal(await local.executeJavaScript('document.getElementById("server").value'),server);
+ await wait(()=>desktop.win.webContents.executeJavaScript('document.getElementById("form").hidden===false'));
+ assert.equal(await desktop.win.webContents.executeJavaScript('document.getElementById("server").value'),server);
  await desktop.load();contents=desktop.getView().webContents;
  foreign=http.createServer((req,res)=>res.end("<h1>Foreign origin</h1>"));await new Promise(resolve=>foreign.listen(0,"127.0.0.1",resolve));
  await contents.loadURL("http://127.0.0.1:"+foreign.address().port+"/");

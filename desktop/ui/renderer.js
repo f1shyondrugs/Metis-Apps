@@ -8,7 +8,7 @@ dispose=mountOnboardingMotion(byId("motion"));
 function paint(state){
  const previous=current;current=state;
  if(state.mode==="ready"){dispose?.();dispose=null;}else if(!dispose)dispose=mountOnboardingMotion(byId("motion"));
- byId("welcome").hidden=state.mode!=="welcome";byId("form").hidden=state.mode!=="settings";
+ byId("welcome").hidden=state.mode!=="welcome";byId("form").hidden=state.mode!=="settings";byId("form-buttons").hidden=state.mode!=="settings";
  byId("actions").hidden=!["loading","error"].includes(state.mode);byId("retry").hidden=state.mode==="loading";
  byId("server-label").textContent=state.mode==="welcome"?"":state.server;
  byId("heading").textContent=state.mode==="welcome"?"Welcome to Metis.":state.mode==="settings"?"Connect to your Metis.":state.mode==="error"?"Connection interrupted.":"Opening your workspace.";
@@ -33,7 +33,7 @@ byId("begin").addEventListener("click",()=>api.settings());
 byId("back").addEventListener("click",()=>current?.firstRun?api.welcome():api.retry());
 byId("retry").addEventListener("click",()=>api.retry());byId("settings").addEventListener("click",()=>api.settings());
 byId("form").addEventListener("submit",async event=>{
- event.preventDefault();if(main.inert)return;const button=byId("form").querySelector('button[type="submit"]');button.disabled=true;
+ event.preventDefault();if(main.inert)return;const button=byId("connect");button.disabled=true;
  try{const result=await api.connect(byId("server").value);if(!result.ok)byId("validation").textContent=result.error;}
  catch{byId("validation").textContent="The address could not be saved. Try again.";}
  finally{button.disabled=false;}

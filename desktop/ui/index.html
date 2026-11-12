@@ -7,15 +7,16 @@
 </head><body>
 <div id="motion" aria-hidden="true"></div>
 <main>
- <header><span class="metis-wordmark" role="img" aria-label="Metis"></span><p class="brand">Metis · This desktop</p><h1 id="heading">Welcome to Metis.</h1><p id="description" aria-live="polite">Your workspace, on your desktop.</p><p id="server-label"></p></header>
+ <header><span class="metis-wordmark" role="img" aria-label="Metis"></span><h1 id="heading">Welcome to Metis.</h1><p id="description" aria-live="polite">Connect. Sign in. Make it yours.</p><p id="server-label"></p></header>
  <section class="content">
-  <div id="welcome"><ol class="features">
-<li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a18 18 0 0 1 0 18 18 18 0 0 1 0-18"/></svg><strong>Connect your server</strong></li>
-<li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg><strong>Sign in or create an account</strong></li>
-<li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7Z"/><path d="m8 12 3 3 5-6"/></svg><strong>Choose device access</strong></li>
-</ol><button id="begin">Continue</button></div>
-  <form id="form" hidden><label for="server">Server address</label><input id="server" name="server" type="url" required autocomplete="url" spellcheck="false" placeholder="https://metis.example.com"><p id="validation" role="alert"></p><p class="hint">Use https://, or http://localhost for a local server.</p><div class="buttons"><button id="back" type="button" class="secondary">Back</button><button type="submit">Continue</button></div></form>
-  <div id="actions" hidden><p class="hint">Your server opens sign-in or first-time setup.</p><div class="buttons"><button id="settings" class="secondary">Back</button><button id="retry">Continue</button></div></div>
+  <form id="form" hidden><label for="server">Server address</label><input id="server" name="server" type="url" required autocomplete="url" spellcheck="false" placeholder="https://metis.example.com" aria-describedby="validation server-hint"><p id="validation" role="alert"></p><p id="server-hint" class="hint">Use https://, or http://localhost for a local server.</p></form>
  </section>
- <footer><ol id="progress" aria-label="Desktop setup progress"><li data-step="welcome" aria-current="step" aria-label="Welcome"><span></span></li><li data-step="settings" aria-label="Server"><span></span></li><li data-step="loading" aria-label="Account"><span></span></li></ol></footer>
+ <footer>
+  <ol id="progress" aria-label="Desktop setup progress"><li data-step="welcome" aria-current="step" aria-label="Welcome"><span></span></li><li data-step="settings" aria-label="Server"><span></span></li><li data-step="loading" aria-label="Account"><span></span></li></ol>
+  <div class="navigation">
+   <div id="welcome" class="buttons"><button id="begin" type="button">Continue</button></div>
+   <div id="form-buttons" class="buttons" hidden><button id="back" type="button" class="secondary">Back</button><button id="connect" type="submit" form="form">Continue</button></div>
+   <div id="actions" class="buttons" hidden><button id="settings" type="button" class="secondary">Back</button><button id="retry" type="button">Continue</button></div>
+  </div>
+ </footer>
 </main></body></html>
