@@ -66,6 +66,13 @@ jobs:
         shell: pwsh
         run: cd desktop; node tests/windows-standard-run.cjs installer
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: metis-test-logs-${{ matrix.platform }}
+          path: desktop/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
         with:
           name: metis-desktop-${{ matrix.platform }}
           path: |

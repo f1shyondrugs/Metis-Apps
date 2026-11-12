@@ -8,7 +8,9 @@ if(process.platform!=='win32')process.exit(spawnSync(command,args,{stdio:'inheri
 const koffi=require('koffi'),kernel=koffi.load('kernel32.dll');
 const {launchStandard}=require('./windows-standard-token.cjs');
 const executable=mode==='e2e'?process.execPath:(process.env.SystemRoot+'\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
-const child=launchStandard(executable,mode==='e2e'?[path.join(path.dirname(process.execPath),'node_modules/npm/bin/npm-cli.js'),'run','test:e2e']:args);
-kernel.func('uint32_t WaitForSingleObject(uintptr_t,uint32_t)')(child.handle,0xFFFFFFFF);
+const child=launchStandard(executable,mode==='e2e'?[path.join(__dirname,'windows-e2e.cjs')]:args);
+console.log('STANDARD_TOKEN_SUITE_START',mode,child.pid);
+const waited=kernel.func('uint32_t WaitForSingleObject(uintptr_t,uint32_t)')(child.handle,600000);
+if(waited!==0){kernel.func('bool TerminateProcess(uintptr_t,uint32_t)')(child.handle,1);child.close(child.handle);throw Error('Standard-token CI suite timed out.');}
 const exit=Buffer.alloc(4);kernel.func('bool GetExitCodeProcess(uintptr_t,void *)')(child.handle,exit);child.close(child.handle);
 process.exit(exit.readUInt32LE());

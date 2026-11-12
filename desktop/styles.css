@@ -82,6 +82,11 @@ h1 { font-size: clamp(25px, 3vw, 31px); line-height: 1.15; letter-spacing: -.045
 .permissions-card.is-blocked { color: #7a4b08; }
 .permissions-card.is-blocked strong { color: #7a4b08; }
 .device-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; color: var(--muted-text); font-size: 12px; padding: 0 0 24px; border-bottom: 1px solid var(--line); }
+#windows-access { width: min(100%, 1040px); margin: 0 auto; padding: 20px clamp(24px, 3vw, 32px); flex-shrink: 0; align-items: flex-start; }
+#windows-access > div { flex: 1 1 380px; min-width: 0; max-width: 85ch; }
+#windows-access strong { display: block; color: var(--text); margin-bottom: 4px; }
+#windows-access button { min-height: 44px; text-align: left; flex-shrink: 0; }
+main:has(#windows-access:not([hidden])) .pair-view { min-height: 0; flex: 1; }
 .permissions-card { align-items: flex-start; justify-content: space-between; }
 .permissions-card .heading-actions { margin-left: auto; }
 .device-state { color: var(--text); font-weight: 600; }
