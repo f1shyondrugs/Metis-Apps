@@ -27,8 +27,9 @@ async function click(selector){const r=await js('(()=>{const r=document.querySel
  await js("fetch('/fixture/sign-in',{method:'POST'}).then(()=>true)");
  await win.reload();await until(()=>js("!!document.querySelector('input[placeholder=\"This device\"]')"));
  await until(()=>js("!!document.querySelector('section > button:not([disabled])')"));
+ const keyCount=await js("document.querySelectorAll('section ul li').length");
  await click('section > button:not([disabled])'); // Add passkey.
- await until(()=>js("document.querySelector('section ul')?.textContent?.includes('Passkey')"));
+ await until(()=>js("document.querySelectorAll('section ul li').length>"+keyCount));
  check((await win.webContents.debugger.sendCommand('WebAuthn.getCredentials',{authenticatorId})).credentials.length===1,'real resident passkey registered and server stored it');
  await win.webContents.session.cookies.remove('http://localhost:3283','ai_chat_auth');
  await open('login');await click('.metis-sign-in-form > section > button');
@@ -64,6 +65,9 @@ async function click(selector){const r=await js('(()=>{const r=document.querySel
  win.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,x:mx-240,y:my+70});await pause(200);
  rect=await js("document.querySelector('aside').getBoundingClientRect().toJSON()");
  check(rect.x<original.x-180&&rect.y>original.y+40,'physical header drag repositions panel');
+ const manual=rect;await js('fixture.long()');await pause(700);
+ const held=await js("document.querySelector('aside').getBoundingClientRect().toJSON()");
+ check(Math.abs(held.width-manual.width)<2&&Math.abs(held.height-manual.height)<2,'manual sizing is not overwritten by a growing reply');
  for(const width of [390,768,1440]){
   win.setContentSize(width,900);await open('tour');await pause(500);
   const a=await js("document.querySelector('.onboarding-tour').getBoundingClientRect().toJSON()");
