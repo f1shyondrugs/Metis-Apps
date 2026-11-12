@@ -20,7 +20,7 @@ function launch({development,nonce,role='file-drop'}) {
   if(!duplicate(ptr(shellToken),0x2000000,null,2,1,primary)||!createEnv(environment,ptr(primary),false))throw Error('Could not prepare normal-user launch ('+last()+').');
   const exe=process.execPath,args=[...(development?[path.join(__dirname,'../../bootstrap.cjs')]:[]),...(role==='desktop'?[]:['--metis-drop-helper','--metis-drop-pipe='+nonce])];
   const command=wide([exe,...args].map(arg=>'"'+arg.replace(/"/g,'')+'"').join(' '));
-  const startup=Buffer.alloc(104),result=Buffer.alloc(24);startup.writeUInt32LE(104,0);startup.writeUInt32LE(1,60);
+  const startup=Buffer.alloc(104),result=Buffer.alloc(24),desktop=wide('winsta0\\default');startup.writeUInt32LE(104,0);startup.writeBigUInt64LE(koffi.address(desktop),16);startup.writeUInt32LE(1,60);
   if(!create(ptr(primary),0,wide(exe),command,0x400,ptr(environment),wide(path.dirname(exe)),startup,result))throw Error('Could not start normal-user file drops ('+last()+').');
   try{return result.readUInt32LE(16);}finally{close(Number(result.readBigUInt64LE(0)));close(Number(result.readBigUInt64LE(8)));}
  }finally{

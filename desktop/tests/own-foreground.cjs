@@ -16,7 +16,14 @@ async function ownForeground() {
  getCursor(saved);getRect(hwnd,rect);
  const point=Buffer.alloc(8);point.writeInt32LE((rect.readInt32LE(0)+rect.readInt32LE(8))/2);point.writeInt32LE((rect.readInt32LE(4)+rect.readInt32LE(12))/2,4);
  try{
-  assert.equal(Number(ancestor(from(point.readBigUInt64LE()),2)),hwnd,'Focus input must hit only the owned fixture');
+  // Native show/stack updates complete on the next Windows message turn.
+  for(let i=0;i<30&&Number(ancestor(from(point.readBigUInt64LE()),2))!==hwnd;i++)await pause(50);
+  const actual=Number(ancestor(from(point.readBigUInt64LE()),2));
+  if(actual!==hwnd){
+   const name=Buffer.alloc(512);user.func('int GetClassNameW(uintptr_t,void *,int)')(actual,name,256);
+   console.error('OWN_FOCUS_NOT_PRESENT',{actual,expected:hwnd,className:name.toString('utf16le').split('\\0')[0],visible:win.isVisible(),bounds:win.getBounds()});
+  }
+  assert.equal(actual,hwnd,'Focus input must hit only the owned fixture');
   setCursor(point.readInt32LE(0),point.readInt32LE(4));mouse(2,0,0,0,0);await pause(30);mouse(4,0,0,0,0);await pause(80);
   assert.equal(Number(get()),hwnd,'Own input gesture must activate the standard fixture');
  }catch(error){win.destroy();throw error;}

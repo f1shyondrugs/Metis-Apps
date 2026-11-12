@@ -15,7 +15,8 @@ function launchStandard(executable,args,{env=process.env,cwd=process.cwd()}={}){
   if(!convert(wide('S-1-16-8192'),sid))throw Error('Test integrity SID '+last());
   const label=Buffer.alloc(28);label.writeBigUInt64LE(BigInt(ptr(sid)));label.writeUInt32LE(0x20,8);
   if(!set(ptr(restricted),25,label,28))throw Error('Test medium integrity '+last());
-  const startup=Buffer.alloc(104),result=Buffer.alloc(24);startup.writeUInt32LE(104);startup.writeUInt32LE(0x100,60);
+  const startup=Buffer.alloc(104),result=Buffer.alloc(24),desktop=wide('winsta0\\default');
+  startup.writeUInt32LE(104);startup.writeBigUInt64LE(koffi.address(desktop),16);startup.writeUInt32LE(0x100,60);
   const std=kernel.func('uintptr_t GetStdHandle(uint32_t)'),inherit=kernel.func('bool SetHandleInformation(uintptr_t,uint32_t,uint32_t)');
   for(const [offset,n]of [[80,0xFFFFFFF6],[88,0xFFFFFFF5],[96,0xFFFFFFF4]]){const handle=Number(std(n));inherit(handle,1,1);startup.writeBigUInt64LE(BigInt(handle),offset);}
   const environment=wide(Object.entries(env).sort(([a],[b])=>a.localeCompare(b)).map(([key,value])=>key+'='+value).join('\0')+'\0');
