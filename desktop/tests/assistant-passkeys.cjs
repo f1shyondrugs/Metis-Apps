@@ -14,6 +14,7 @@ async function click(selector){const r=await js('(()=>{const r=document.querySel
  await app.whenReady();
  win=new BrowserWindow({width:1440,height:900,show:true,frame:false,webPreferences:{preload:path.resolve(__dirname,'../src/main/assistant-preload.cjs'),contextIsolation:true,sandbox:true,backgroundThrottling:false}});
  win.webContents.on('console-message',(event,...args)=>console.log('RENDERER',event.message||args[1]||args[0]));
+ require('../src/main/web-permissions.cjs').createWebPermissionPolicy({file:path.join(data,'permissions.json')}).register(win.webContents,'http://localhost:3283',win);
  win.setMinimumSize(0,0);
  let fullShape=false,latestRegions;
  ipcMain.on('assistant:regions',(_event,value)=>{latestRegions=value;if(win.webContents.getURL().includes('view=panel'))console.log('REGIONS',JSON.stringify(value.rects));fullShape=value.rects.length===1&&value.rects[0].width===value.width;if(process.platform!=='darwin'&&win.webContents.getURL().includes('view=panel'))win.setShape(require('../src/main/assistant-regions.cjs').interactionRegions(value,win.getContentBounds()));});
