@@ -52,7 +52,7 @@ jobs:
         shell: bash
         run: |
           if [ '${{ matrix.platform }}' = linux ]; then xvfb-run -a npm run test:e2e --prefix desktop
-          elif [ '${{ matrix.platform }}' = windows ]; then (cd desktop && node tests/windows-standard-run.cjs e2e && node tests/split-admin-windows.cjs)
+          elif [ '${{ matrix.platform }}' = windows ]; then (cd desktop && node tests/split-admin-windows.cjs && node tests/windows-standard-run.cjs e2e)
           else npm run test:e2e --prefix desktop; fi
       - name: Build desktop installer
         run: npm run ${{ matrix.command }} --prefix desktop -- --publish never
