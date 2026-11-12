@@ -16,7 +16,7 @@ test("Linux hub:pair without keyring or X11 saves, resumes and unpairs a termina
   let enrollment;
   const electron = {
     app: { getPath: name => paths[name], setPath: (name, value) => paths[name] = value,
-      setName() {}, commandLine: { appendSwitch() {} }, requestSingleInstanceLock: () => false, quit() {}, getVersion: () => "1.4.7" },
+      setName() {}, whenReady: async () => {}, commandLine: { appendSwitch() {} }, requestSingleInstanceLock: () => false, quit() {}, getVersion: () => "1.4.7" },
     ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
     safeStorage: { isEncryptionAvailable: () => false, getSelectedStorageBackend: () => "basic_text" },
     screen: { getAllDisplays: () => [] },
