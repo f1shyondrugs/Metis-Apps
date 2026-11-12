@@ -20,7 +20,12 @@ const pipe = '\\\\.\\pipe\\metis-device-' + workerData.nonce;
 const invalid = value => value === -1 || BigInt(value) === 0xFFFFFFFFFFFFFFFFn || !value;
 const create = kernel.func('uintptr_t CreateNamedPipeW(void *,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,void *)');
 const connect = kernel.func('bool ConnectNamedPipe(uintptr_t,void *)');
-const disconnect = kernel.func('bool DisconnectNamedPipe(uintptr_t)');
+const impersonate = adv.func('bool ImpersonateNamedPipeClient(uintptr_t)');
+const revert = adv.func('bool RevertToSelf()');
+const openThreadToken = adv.func('bool OpenThreadToken(uintptr_t,uint32_t,bool,void *)');
+const currentThread = kernel.func('uintptr_t GetCurrentThread()');
+const hello=Buffer.from('METIS-DEVICE-V1!!'),greeting=Buffer.alloc(hello.length);
+let greetingBytes=0;
 const open = kernel.func('uintptr_t CreateFileW(void *,uint32_t,uint32_t,void *,uint32_t,uint32_t,uintptr_t)');
 const state = kernel.func('bool SetNamedPipeHandleState(uintptr_t,void *,void *,void *)');
 const read = kernel.func('bool ReadFile(uintptr_t,void *,uint32_t,void *,void *)');
@@ -41,7 +46,29 @@ function verify() {
   const processHandle = Number(openProcess(0x1000, false, expectedPid)), token = Buffer.alloc(8);
   if (!processHandle) throw Error('Could not verify background device peer.');
   try {
-    if (!openToken(processHandle, 8, token)) throw Error('Could not inspect background device peer token.');
+    if(workerData.server){
+      // Read only the fixed greeting before identification. Never interpret
+      // application data from an unverified client.
+      if(greetingBytes<hello.length){
+        const available=Buffer.alloc(4),count=Buffer.alloc(4);
+        if(!peek(handle,null,0,null,available,null))throw Error('Device identity channel closed.');
+        if(!available.readUInt32LE())return false;
+        const chunk=Buffer.alloc(Math.min(hello.length-greetingBytes,available.readUInt32LE()));
+        if(!read(handle,chunk,chunk.length,count,null))throw Error('Device identity read failed.');
+        chunk.copy(greeting,greetingBytes,0,count.readUInt32LE());greetingBytes+=count.readUInt32LE();
+        if(greetingBytes<hello.length)return false;
+      }
+      if(!greeting.equals(hello))throw Error('Invalid device identity greeting.');
+      // Medium cannot OpenProcessToken on a High process. Identification-only
+      // pipe SQOS lets it query the kernel's client identity, never act as it.
+      if(!impersonate(handle))throw Error('Could not identify background device client.');
+      try{
+        if(!openThreadToken(currentThread(),8,true,token))throw Error('Could not query device identification token.');
+        const level=Buffer.alloc(4),length=Buffer.alloc(4);
+        if(!info(Number(token.readBigUInt64LE()),9,level,4,length)||level.readUInt32LE()!==1)
+          throw Error('Device channel must use identification-only SQOS.');
+      }finally{if(!revert())throw Error('Could not leave device identification context.');}
+    }else if (!openToken(processHandle, 8, token)) throw Error('Could not inspect desktop peer token.');
     const identity = tokenIdentity(koffi, info, Number(token.readBigUInt64LE()));
     const name = Buffer.alloc(65536), length = Buffer.alloc(4); length.writeUInt32LE(32768);
     if (!image(processHandle, 0, name, length)) throw Error('Could not inspect background device executable.');
@@ -50,6 +77,13 @@ function verify() {
         identity.elevated !== Boolean(workerData.server) ||
         path.win32.normalize(executable).toLowerCase() !== path.win32.normalize(process.execPath).toLowerCase())
       throw Error('Background device identity mismatch.');
+    if(!workerData.server&&greetingBytes<hello.length){
+      const count=Buffer.alloc(4),remaining=hello.subarray(greetingBytes);
+      const ok=write(handle,remaining,remaining.length,count,null);
+      if(!ok&&last()!==232)throw Error('Could not send device identity greeting.');
+      greetingBytes+=count.readUInt32LE();
+      if(greetingBytes<hello.length)return false;
+    }
     return true;
   } finally {
     if (token.readBigUInt64LE()) close(Number(token.readBigUInt64LE()));
@@ -78,6 +112,11 @@ function tick() {
         if (invalid(handle)) { handle=0; throw Error('Could not create private device pipe.'); }
         parentPort.postMessage({type:'listening'});
       } else {
+        // A late UAC approval after the desktop has quit must not leave an
+        // elevated process waiting for a pipe whose owner no longer exists.
+        const parent=Number(openProcess(0x1000,false,expectedPid));
+        if(!parent)throw Error('Desktop process is no longer running.');
+        close(parent);
         // SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION (not impersonation).
         handle = Number(open(wide(pipe), 0xC0000000, 0, null, 3, 0x110000, 0));
         if (invalid(handle)) { handle=0; if (Date.now() > deadline) throw Error('Desktop device channel was not available.'); timer=setTimeout(tick,25); return; }

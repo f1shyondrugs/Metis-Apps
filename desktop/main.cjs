@@ -401,6 +401,7 @@ async function startRuntime() {
   computerUseOverlay?.hide();
   runtime?.stop();
   runtime = null;
+  if(process.platform==="win32"&&selected.permissionMode==="user")administratorHost.close();
   currentAppearance = appearance.fallback;
   computerUseOverlay?.setAppearance(currentAppearance);
   broadcast();
@@ -550,6 +551,7 @@ function registerIpc() {
     runtime?.stop();
     runtime = null;
     config = null;
+    administratorHost.close();
     status.accessMismatch=false;
     status.deviceElevation=null;
     currentAppearance = appearance.fallback;
