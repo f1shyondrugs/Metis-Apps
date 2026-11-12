@@ -36,7 +36,8 @@ async function run(){
  await contents.executeJavaScript("metisApp.requestDesktopPermissions()");assert.equal(permissionCalls,1);
  assert.equal(await contents.executeJavaScript("typeof document.querySelector('iframe').contentWindow.metisApp"),"undefined");
  console.log("FRESH_DESKTOP_DOMAIN_AND_SERVER_SETUP_OK");
- await contents.executeJavaScript("metisApp.openServerSettings()");await wait(()=>desktop.getState().mode==="settings");
+ // Opening settings intentionally destroys this remote WebContents. Observe the surviving owner, not its evaluation reply.
+ void contents.executeJavaScript("metisApp.openServerSettings()").catch(()=>{});await wait(()=>desktop.getState().mode==="settings");
  assert.equal(await local.executeJavaScript('document.getElementById("server").value'),server);
  await desktop.load();contents=desktop.getView().webContents;
  foreign=http.createServer((req,res)=>res.end("<h1>Foreign origin</h1>"));await new Promise(resolve=>foreign.listen(0,"127.0.0.1",resolve));
