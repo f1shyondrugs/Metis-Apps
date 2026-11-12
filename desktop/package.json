@@ -74,7 +74,7 @@
       "notification-client.mjs",
       "notification-native.cjs",
       "src/main/**/*",
-      "src/device/runtime*.cjs",
+      "src/device/*.cjs",
       "LICENSE",
       "policy.cjs",
       "ui/**/*"

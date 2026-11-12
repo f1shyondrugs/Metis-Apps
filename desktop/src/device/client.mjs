@@ -13,12 +13,13 @@ import { createNotificationReceiver } from "./notification-client.mjs";
 const execFileAsync = promisify(execFile);
 const shell = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : (process.env.SHELL || "/bin/sh");
 
-export function startRemoteClient({ config: suppliedConfig, configPath, onEvent = () => {}, desktopGuiAvailable = () => false, nativeNotificationsAvailable = () => false, overlayAnnotationsAvailable = () => false, showNotification } = {}) {
+export function startRemoteClient({ config: suppliedConfig, configPath, onEvent = () => {}, desktopGuiAvailable = () => false, nativeNotificationsAvailable = () => false, overlayAnnotationsAvailable = () => false, showNotification, logEvent, receiveNotification: suppliedNotificationReceiver } = {}) {
   const resolvedPath = configPath || process.env.METIS_REMOTE_CLIENT_CONFIG ||
     path.join(os.homedir(), ".metis-ai", "remote-client.json");
   const config = suppliedConfig || JSON.parse(fs.readFileSync(resolvedPath, "utf8").replace(/^\uFEFF/, ""));
   const logFile = path.join(path.dirname(resolvedPath), "client.log");
   const log = (...items) => {
+    if (logEvent) { logEvent(items); return; }
     try { fs.appendFileSync(logFile, `${new Date().toISOString()} ${items.join(" ")}\n`); } catch {}
   };
   const emit = (event) => {
@@ -32,7 +33,7 @@ export function startRemoteClient({ config: suppliedConfig, configPath, onEvent 
     throw new Error("Remote client configuration is incomplete");
   }
   const wsUrl = server.replace(/^http:/, "ws:").replace(/^https:/, "wss:") + "/ws/remote-client";
-  const receiveNotification = createNotificationReceiver({ config, configPath: resolvedPath, available: nativeNotificationsAvailable, show: showNotification });
+  const receiveNotification = suppliedNotificationReceiver || createNotificationReceiver({ config, configPath: resolvedPath, available: nativeNotificationsAvailable, show: showNotification });
   const running = new Map();
   const computerUseControllers = new Set();
   const computerUsePending = new Map();

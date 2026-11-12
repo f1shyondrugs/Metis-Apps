@@ -1,11 +1,17 @@
-# Windows administrator access
+# Windows desktop and background device access
 
-Windows elevation and the pairing grant are independent. An existing normal Metis process cannot gain a new token when a second shortcut is launched with Run as administrator.
+The desktop app runs as the signed-in **Standard user**. An Administrator pairing starts a separate elevated **Metis Device Connection** process through ordinary Windows UAC. It has no window or tray. Only the normal desktop process owns the shared **Metis** tray, desktop windows, assistant and notifications.
 
-Open **Remote Client Device Settings → Restart as administrator** and confirm Windows UAC. Cancelling keeps the normal app and saved pairing unchanged. After approval, the fixed Metis executable waits for the old process to exit, without killing it or forwarding a command, server URL or pairing code. Normal reopens never request UAC.
+Enter an Administrator pairing code in **Remote Client Device Settings** and confirm UAC. You can also use **Enable Administrator Remote Client** before pairing. Cancelling leaves the normal app and any current User connection unchanged; it does not consume the code. The elevated device utility independently verifies its actual token before loading remote commands. An existing User pairing is never silently upgraded.
 
-An elevated app with a saved **User access** pairing keeps that credential but pauses the device connection. Create an **Administrator access** pairing code in Metis → Settings → Devices and enter it locally. No grant is upgraded automatically; choosing User access again requires quitting from the tray and starting normally.
+Closing either window with X hides it. Device commands and notifications continue in the background. **Open Metis** or **Open Remote Client Device Settings** in the one tray reopens the relevant window without another UAC prompt. **Quit** stops both processes. Loss of the private desktop channel also stops the elevated host, so crashes cannot leave an uncontrolled elevated client.
 
-Device Settings shows both the main Windows process and the device-host token. The utility process independently verifies its actual token before connecting; a mismatch fails closed. The local restart IPC is restricted to the exact local main frame. The existing fixed show-window signal, background-close behavior, autostart choices and global UAC settings stay unchanged.
+Launching the desktop shortcut with Run as administrator redirects the UI to the same OS account/session's verified normal shell token. This does not change a pairing grant or skip the separate device consent. If the interactive shell is unavailable or belongs to another account/session, launch fails rather than keeping an elevated web UI. Autostart of the UI uses Limited rights; an admin-paired cold start can request device UAC once, and cancellation leaves the desktop usable with an explicit retry.
 
-Tests: admin-restart.test.cjs, device-elevation.test.cjs, reopen.test.cjs, file-drop.test.cjs, and unified.cjs (including actual Windows main/device token agreement and foreign-frame rejection). Consent cancellation is simulated in unit tests; a real user's secure-desktop confirmation is never automated.
+## Local boundary
+
+Only fixed executable/role arguments and a random pipe nonce plus parent PID are passed through RunAs. No credentials, URLs, commands or pairing codes are in arguments. The native pipe uses FIRST_PIPE_INSTANCE and rejects remote clients. Both endpoints check kernel-supplied peer PID, SID, session, elevation and exact current executable before accepting any payload. The elevated client uses SECURITY_IDENTIFICATION SQOS so the normal pipe server cannot impersonate its admin token. Frames and queues are bounded; transport work stays off the UI thread. The fixed protocol can start/stop the device runtime, update presentation capabilities, cancel computer use and acknowledge events; it has no arbitrary local shell/file/launch operation.
+
+Pairing data is sent only in memory to that verified child. Existing OS-encrypted credential storage and server-side access grants remain authoritative. Main-frame/local-file guards cover the UI action; remote web frames cannot start elevation. No global UAC setting, privileged scheduled task, firewall rule or existing grant is altered to make this work.
+
+Tests distinguish real token/pipe integration from simulated UAC cancellation. A user's secure-desktop approval is never automated.

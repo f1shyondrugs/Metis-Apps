@@ -87,11 +87,19 @@ async function isElevated() {
  if(value==="unknown")throw Error("Windows administrator status could not be verified.");
  return value==="administrator";
 }
-const restartAsAdministrator=require("./src/main/admin-restart.cjs").createAdminRestart({
- platform:process.platform,readElevation:getWindowsElevation,developmentEntry:app.isPackaged?undefined:path.join(__dirname,"bootstrap.cjs"),
+const administratorHost=require("./src/device/admin-controller.cjs").createAdminController({
+ developmentEntry:app.isPackaged?undefined:path.join(__dirname,"bootstrap.cjs"),
+ createChannel:options=>require("./src/device/windows-channel.cjs").createChannel(options),
  launch:async args=>Number(await runPowerShell(`$child = Start-Process -FilePath ${psQuote(process.execPath)} -ArgumentList ${psQuote(args.map(arg=>'"'+arg+'"').join(" "))} -Verb RunAs -PassThru; $child.Id`,120000)),
- quit:()=>app.quit()
+ onClosed:error=>{if(config?.permissionMode==="admin"){status.deviceElevation=null;status.connection="error";status.error=error.message;broadcast();}}
 });
+async function enableAdministratorClient() {
+ if(process.platform!=="win32")throw Error("Administrator device access is available on Windows only.");
+ if(getWindowsElevation()!=="user")throw Error("Open the desktop app normally before connecting its background Administrator Remote Client.");
+ await administratorHost.ensure();
+ if(config?.permissionMode==="admin")await startRuntime();
+ return publicState();
+}
 
 function getAutostart() {
   if (process.platform !== "win32") {
@@ -118,7 +126,8 @@ function setAutostart(enabled) {
   }
   const taskName = psQuote(AUTOSTART_TASK);
   if (enabled) {
-    const runLevel = config?.permissionMode === "admin" ? "Highest" : "Limited";
+    // Autostart belongs to the normal UI. UAC applies only to the device host.
+    const runLevel = "Limited";
     await runPowerShell(`$user = [Security.Principal.WindowsIdentity]::GetCurrent().Name; $action = New-ScheduledTaskAction -Execute ${psQuote(process.execPath)}; $trigger = New-ScheduledTaskTrigger -AtLogon -User $user; $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel ${runLevel}; Register-ScheduledTask -TaskName ${taskName} -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null`);
   } else {
     await runPowerShell(`Unregister-ScheduledTask -TaskName ${taskName} -Confirm:$false -ErrorAction SilentlyContinue`);
@@ -206,6 +215,7 @@ function publicState() {
   return {
     paired: Boolean(config) && !status.accessMismatch,
     windowsElevation: getWindowsElevation(),
+    backgroundClient: { running: Boolean(runtime?.pid), elevation: status.deviceElevation || null },
     server: config?.server || "",
     clientId: config?.clientId || "",
     version: app.getVersion(),
@@ -301,7 +311,7 @@ function trayImage() {
 
 function updateTray() {
   if (!tray) return;
-  const key = JSON.stringify([status.connection, Boolean(config), autostartEnabled, overlayPreferences?.getAssistantShortcuts?.(), annotationOverlay?.status()]);
+  const key = JSON.stringify([status.connection, status.deviceElevation, Boolean(config), autostartEnabled, overlayPreferences?.getAssistantShortcuts?.(), annotationOverlay?.status()]);
   if (key === lastTrayKey) return;
   lastTrayKey = key;
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -312,7 +322,8 @@ function updateTray() {
       { label: "Clear all annotations", click: () => annotationOverlay?.clearAll() },
       ...(annotationOverlay?.status().displays || []).flatMap(d => d.items.filter(i=>i.type==="card").map(i=>({ label: "Interact: "+d.name+" / "+i.id, click: () => { annotationOverlay.execute({operation:"interact",display_id:d.id,interactive_id:i.id}).catch(error=>{status.error=error.message;broadcast();}); } }))),
     ] },
-    { label: `Connection: ${status.connection}`, enabled: false },
+    { label: `Desktop app: ${getWindowsElevation()==="administrator"?"Administrator":getWindowsElevation()==="unknown"?"Unverified":"Standard user"}`, enabled: false },
+    { label: `Remote Client: ${status.deviceElevation === "administrator" ? "Administrator" : status.deviceElevation === "user" ? "Standard user" : "Not connected"} — ${status.connection}`, enabled: false },
     { type: "separator" },
     { label: "Start at login", type: "checkbox", checked: autostartEnabled,
       click: async (item) => { try { await setAutostart(item.checked); } catch (error) { lastTrayKey = ""; status.error = error.message; broadcast(); } } },
@@ -386,10 +397,20 @@ async function startRuntime() {
   computerUseOverlay?.setAppearance(currentAppearance);
   broadcast();
   if (!config || status.accessMismatch) return;
+  if(process.platform==="win32"&&config.permissionMode==="admin")await administratorHost.ensure();
   const { startDeviceHost } = require("./src/device/runtime.cjs");
   const { showNativeNotification } = require("./notification-native.cjs");
-  runtime = startDeviceHost({
+  const startHost=process.platform==="win32"&&config.permissionMode==="admin"
+    ? options=>require("./src/device/admin-controller.cjs").attachAdminRuntime(administratorHost,options)
+    : startDeviceHost;
+  const { createNotificationReceiver } = await import(pathToFileURL(path.join(__dirname, "notification-client.mjs")).href);
+  runtime = startHost({
     utilityProcess,
+    receiveNotification: createNotificationReceiver({
+      config, configPath:configPath(),
+      available:()=>status.desktopAvailable&&Notification.isSupported(),
+      show:notification=>showNativeNotification({Notification,openChat:openDesktopChat,server:config.server,notification})
+    }),
     config,
     configPath: configPath(),
     capabilities: { desktopAvailable: status.desktopAvailable, overlayAnnotations: Boolean(annotationOverlay && status.desktopAvailable), nativeNotifications: screen.getAllDisplays().length > 0 && Notification.isSupported() },
@@ -460,7 +481,7 @@ function registerIpc() {
     return handler(event, ...args);
   });
   handle("hub:state", () => publicState());
-  handle("hub:restart-as-administrator", () => restartAsAdministrator());
+  handle("hub:restart-as-administrator", () => enableAdministratorClient());
   handle("hub:snapshot", () => fetchSnapshot());
   handle("hub:pair", async (_event, input) => {
     const server = normalizeServer(input?.server).replace(/\/+$/, "");
@@ -474,7 +495,7 @@ function registerIpc() {
     const permissionMode = token.startsWith("a_") ? "admin" : "user";
     if (process.platform === "win32") {
       const elevated = await isElevated();
-      if (permissionMode === "admin" && !elevated) throw new Error("Administrator access was selected in Metis. Use Restart as administrator here, confirm UAC, then re-enter the same Administrator code.");
+      if (permissionMode === "admin" && !elevated) await administratorHost.ensure();
       if (permissionMode === "user" && elevated) throw new Error("User access was selected in Metis. Quit Metis from the tray, then start normally without administrator rights and enter the same code.");
     }
     const response = await fetch(`${parsed.origin}/api/remote-clients/enroll`, {
@@ -633,7 +654,7 @@ if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
   app.on("second-instance", (_event,_argv,_cwd,hint) => {
     // This untrusted hint changes presentation only, never permissions or UAC.
     if(getWindowsElevation()==="user"&&hint?.windowsElevation==="administrator"){
-      status.error="Metis is already running without administrator rights. Use Restart as administrator here; an elevated second launch cannot upgrade an existing process.";
+      status.error="The desktop app stays in Standard user mode. Enable the Administrator Remote Client here and confirm Windows UAC.";
       void desktopReady.then(()=>{showWindow();broadcast();});
     }else void showDesktop();
   });
@@ -650,13 +671,8 @@ if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
     app.setAppUserModelId(process.env.METIS_DESKTOP_TEST_DATA ? "ai.metis.remoteclient.test" : "ai.metis.remoteclient");
     try { config = loadConfig(); } catch (error) { status.error = error.message; }
     const actualElevation=getWindowsElevation();
-    status.accessMismatch=process.platform==="win32"&&Boolean(config)&&(actualElevation==="unknown"||((config.permissionMode==="admin")!==(actualElevation==="administrator")));
-    if(process.platform==="win32"&&config?.permissionMode==="admin"&&actualElevation==="user"){
-      try{await restartAsAdministrator();return;}
-      catch{status.error="Administrator access was not confirmed. Your saved pairing is unchanged. Use Restart as administrator to try again.";}
-    }else if(status.accessMismatch){
-      status.error=actualElevation==="unknown"?"Windows administrator status could not be verified. Device access is paused.": "This process is elevated, but the saved pairing grants User access. Enter a new Administrator pairing code, or quit and start normally. Your existing pairing is unchanged.";
-    }
+    status.accessMismatch=process.platform==="win32"&&Boolean(config)&&actualElevation==="unknown";
+    if(status.accessMismatch)status.error="Windows process rights could not be verified. Device access is paused.";
     if (process.platform === "win32" && app.getLoginItemSettings().openAtLogin) {
       app.setLoginItemSettings({ openAtLogin: false, path: process.execPath });
       try { await setAutostart(true); } catch (error) { status.error = error.message; }
@@ -715,13 +731,22 @@ if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
     setupUpdates();
     // Device permissions are requested from local settings when explicitly needed.
   });
-  app.on("before-quit", () => {
+  let shutdownStarted=false,shutdownFinished=false;
+  app.on("before-quit", event => {
+    // One tray owns both processes. Allow the private shutdown frame to drain
+    // before the normal app exits; channel loss also stops the elevated host.
+    if(process.platform==="win32"&&administratorHost.connected&&!shutdownFinished){
+      event.preventDefault();
+      if(!shutdownStarted){shutdownStarted=true;administratorHost.shutdown();setTimeout(()=>{shutdownFinished=true;app.quit();},400);}
+      return;
+    }
     activationListener?.close();
     quitting = true;
     computerUseOverlay?.hide();
     assistant?.destroy();
     annotationOverlay?.destroy();
     runtime?.stop();
+    administratorHost.shutdown();
   });
   app.on("window-all-closed", () => {});
 }

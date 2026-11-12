@@ -35,6 +35,10 @@ process.parentPort.on('message', async ({ data }) => {
         nativeNotificationsAvailable: () => capabilities.nativeNotifications === true,
         overlayAnnotationsAvailable: () => capabilities.overlayAnnotations === true,
         showNotification: value => request('notification', value),
+        // High runtime never writes logs/dedupe files through a Medium-owned path.
+        // Notification persistence remains in the normal desktop process.
+        logEvent: data.presentationOwned ? () => {} : undefined,
+        receiveNotification: data.presentationOwned ? value => request('notification-message', value) : undefined,
         onEvent: value => ['computer_use','desktop_overlay'].includes(value.type)
           ? request('event', value)
           : process.parentPort.postMessage({ type: 'event', value })

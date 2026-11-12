@@ -1,5 +1,5 @@
 const path = require('node:path');
-function startDeviceHost({ utilityProcess, config, configPath, capabilities, onEvent, showNotification }) {
+function startDeviceHost({ utilityProcess, config, configPath, capabilities, onEvent, showNotification, receiveNotification, presentationOwned = false }) {
   let child;
   let stopped = false;
   let restart;
@@ -10,7 +10,7 @@ function startDeviceHost({ utilityProcess, config, configPath, capabilities, onE
     child = current;
     current.on('spawn', () => {
       if (stopped || child !== current) return;
-      current.postMessage({ type: 'start', config, configPath, capabilities });
+      current.postMessage({ type: 'start', config, configPath, capabilities, presentationOwned });
     });
     current.on('message', async message => {
       if (stopped || child !== current) return;
@@ -20,6 +20,7 @@ function startDeviceHost({ utilityProcess, config, configPath, capabilities, onE
           if (message.value.type === 'connection' && message.value.status === 'online') failures = 0;
           value = await onEvent(message.value);
         } else if (message.type === 'notification') value = await showNotification(message.value);
+        else if (message.type === 'notification-message' && presentationOwned) value = await receiveNotification(message.value);
         if (message.id && !stopped && child === current) current.postMessage({ type: 'reply', id: message.id, value });
       } catch (error) {
         if (message.id && !stopped && child === current) current.postMessage({ type: 'reply', id: message.id, error: error.message });

@@ -1,8 +1,8 @@
 // Fixed-role launch only. No commands, credentials or arbitrary executable paths.
 const {isMainThread,parentPort,workerData}=require('node:worker_threads');
 const path=require('node:path');
-function launch({development,nonce}) {
- if(process.platform!=='win32'||!/^[a-f0-9]{32}$/.test(nonce||''))throw Error('Invalid drop-helper launch.');
+function launch({development,nonce,role='file-drop'}) {
+ if(process.platform!=='win32'||!['file-drop','desktop'].includes(role)||(role==='file-drop'&&!/^[a-f0-9]{32}$/.test(nonce||'')))throw Error('Invalid drop-helper launch.');
  const koffi=require('koffi'),user=koffi.load('user32.dll'),kernel=koffi.load('kernel32.dll'),adv=koffi.load('advapi32.dll'),env=koffi.load('userenv.dll');
  const openProcess=kernel.func('uintptr_t OpenProcess(uint32_t,bool,uint32_t)'),close=kernel.func('bool CloseHandle(uintptr_t)'),current=kernel.func('uintptr_t GetCurrentProcess()');
  const open=adv.func('bool OpenProcessToken(uintptr_t,uint32_t,void *)'),info=adv.func('bool GetTokenInformation(uintptr_t,uint32_t,void *,uint32_t,void *)'),duplicate=adv.func('bool DuplicateTokenEx(uintptr_t,uint32_t,void *,uint32_t,uint32_t,void *)');
@@ -18,7 +18,7 @@ function launch({development,nonce}) {
   const {tokenIdentity}=require('./windows-token-identity.cjs'),ownIdentity=tokenIdentity(koffi,info,ptr(own)),normalIdentity=tokenIdentity(koffi,info,ptr(shellToken));
   if(normalIdentity.elevated||normalIdentity.sid!==ownIdentity.sid||normalIdentity.session!==ownIdentity.session)throw Error('Normal-user launch identity does not match this session.');
   if(!duplicate(ptr(shellToken),0x2000000,null,2,1,primary)||!createEnv(environment,ptr(primary),false))throw Error('Could not prepare normal-user launch ('+last()+').');
-  const exe=process.execPath,args=[...(development?[path.join(__dirname,'../../bootstrap.cjs')]:[]),'--metis-drop-helper','--metis-drop-pipe='+nonce];
+  const exe=process.execPath,args=[...(development?[path.join(__dirname,'../../bootstrap.cjs')]:[]),...(role==='desktop'?[]:['--metis-drop-helper','--metis-drop-pipe='+nonce])];
   const command=wide([exe,...args].map(arg=>'"'+arg.replace(/"/g,'')+'"').join(' '));
   const startup=Buffer.alloc(104),result=Buffer.alloc(24);startup.writeUInt32LE(104,0);startup.writeUInt32LE(1,60);
   if(!create(ptr(primary),0,wide(exe),command,0x400,ptr(environment),wide(path.dirname(exe)),startup,result))throw Error('Could not start normal-user file drops ('+last()+').');

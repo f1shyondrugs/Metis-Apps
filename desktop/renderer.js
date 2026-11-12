@@ -61,10 +61,10 @@ function setConnection(data) {
   renderDesktopPermission(state);
   const access=byId("windows-access"),restart=byId("restart-as-administrator");
   access.hidden=state.platform!=="win32";
-  byId("windows-access-title").textContent=state.windowsElevation==="administrator"?"Windows process: Administrator":state.windowsElevation==="user"?"Windows process: Standard user":"Windows process: Unverified";
-  byId("windows-access-detail").textContent=state.accessMismatch?"Device access is paused until Windows rights and the pairing mode match. Enter a new matching pairing code; the saved pairing has not been changed.":state.permissionMode==="user"?"This device is paired with User access. Administrator access also requires a new Administrator pairing code.":"Administrator pairing requires Windows UAC approval.";
+  byId("windows-access-title").textContent=state.windowsElevation==="user"?"Desktop app: Standard user":"Desktop app: "+(state.windowsElevation==="administrator"?"Administrator":"Unverified");
+  byId("windows-access-detail").textContent=state.accessMismatch?"Device access is paused because Windows process rights could not be verified.":state.permissionMode==="user"?"This device is paired with User access. Administrator access requires a new Administrator pairing code and Windows UAC approval.":"The Remote Client runs separately in the background. Administrator access requires Windows UAC approval; the desktop app stays in Standard user mode.";
   if(state.deviceElevation)byId("windows-access-detail").textContent+=" Remote Client process: "+(state.deviceElevation==="administrator"?"Administrator.":"Standard user.");
-  restart.hidden=state.platform!=="win32"||state.windowsElevation!=="user";
+  restart.hidden=state.platform!=="win32"||state.windowsElevation!=="user"||state.deviceElevation==="administrator";
   if (data.error && state.paired) showHubError(data.error);
   if (data.error && !state.paired) {
     byId("pair-error").textContent = data.error;
@@ -372,8 +372,8 @@ byId("pair-form").addEventListener("submit", async (event) => {
 });
 byId("restart-as-administrator").addEventListener("click",async()=>{
  const button=byId("restart-as-administrator");button.disabled=true;
- try{await window.metis.restartAsAdministrator();}
- catch{showHubError("Administrator restart was not confirmed. Metis is still running; no pairing or settings were changed.");}
+ try{setConnection(await window.metis.restartAsAdministrator());}
+ catch(error){showHubError(error.message||"Windows approval was not confirmed. The desktop app and saved pairing are unchanged.");}
  finally{button.disabled=false;}
 });
 byId("refresh").addEventListener("click", () => void refresh());
@@ -428,5 +428,5 @@ function renderDesktopPermission(next) {
   byId("desktop-permission-notice").hidden = Boolean(next.desktopAvailable);
   byId("desktop-permission-reason").textContent = next.desktopReason || "Desktop control is unavailable. File and command access remain available.";
   byId("desktop-access-permissions").hidden = next.platform !== "darwin";
-  byId("pair-note").textContent = next.platform === "win32" ? "The code expires after 15 minutes. For Administrator access, use Restart as administrator and confirm UAC, then enter an Administrator pairing code." : "The code expires after 15 minutes. System actions require the permissions of your signed-in account.";
+  byId("pair-note").textContent = next.platform === "win32" ? "The code expires after 15 minutes. Enter an Administrator pairing code and confirm Windows UAC to start the background Remote Client. The desktop app stays in Standard user mode." : "The code expires after 15 minutes. System actions require the permissions of your signed-in account.";
 }
