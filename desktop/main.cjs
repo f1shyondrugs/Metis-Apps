@@ -704,6 +704,7 @@ if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
     void getAutostart();
     await showDesktop();
     markDesktopReady();
+    if(status.accessMismatch){showWindow();broadcast();}
     if (config) {
       try { await startRuntime(); } catch (error) {
         status.connection = "error";
