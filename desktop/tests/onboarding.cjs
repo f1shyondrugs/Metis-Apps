@@ -23,7 +23,8 @@ async function run(){
  desktop=await createDesktop({onDesktopPermissions:async()=>{permissionCalls++;return {available:false,reason:"Synthetic OS status"};}});
  await desktop.initialLoad;
  assert.equal(desktop.getState().mode,"welcome");assert.equal(desktop.getView(),undefined);
- assert.equal(desktop.win.isMenuBarVisible(),false);console.log("FRAMELESS_NATIVE_SPLASH_OK");
+ // macOS has a global application menu, not a per-window menu bar.
+ if(process.platform!=="darwin")assert.equal(desktop.win.isMenuBarVisible(),false);console.log("FRAMELESS_NATIVE_SPLASH_OK");
  const local=desktop.win.webContents;
  await wait(()=>local.executeJavaScript('Boolean(document.querySelector("#motion svg path"))'));
  await captureSeries(local,"intro");
@@ -76,7 +77,15 @@ async function run(){
  assert.ok(glowPaint>innerPaint&&innerPaint===0,"One real frame must show the soft glow fading to black beyond the sharp dot band");
  console.log("SOFT_EDGE_GLOW_ACTUAL_PIXEL_VERIFIED");
  const before=await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")');
- await new Promise(resolve=>setTimeout(resolve,120));const after=await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")');if(process.env.METIS_ONBOARDING_REDUCED==="1"){assert.equal(before,after);assert.equal(await local.executeJavaScript('getComputedStyle(document.querySelector(".content")).animationName'),"none");console.log("ONBOARDING_REDUCED_MOTION_STATIC_OK");}else assert.notEqual(before,after);
+ const reduced=await local.executeJavaScript('matchMedia("(prefers-reduced-motion: reduce)").matches');
+ if(process.env.METIS_ONBOARDING_REDUCED==="1")assert.equal(reduced,true);
+ if(reduced){
+  await new Promise(resolve=>setTimeout(resolve,120));assert.equal(before,await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")'));
+  assert.equal(await local.executeJavaScript('getComputedStyle(document.querySelector(".content")).animationName'),"none");console.log("ONBOARDING_REDUCED_MOTION_STATIC_OK");
+ }else{
+  await wait(async()=>before!==await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")'));
+  console.log("ONBOARDING_VISIBLE_MOTION_ADVANCES_OK");
+ }
  fs.mkdirSync(path.join(__dirname,"..","test-results"),{recursive:true});fs.writeFileSync(path.join(__dirname,"..","test-results","onboarding-welcome.png"),(await local.capturePage()).toPNG());
  await local.executeJavaScript('document.getElementById("begin").click()');await wait(()=>desktop.getState().mode==="settings");
  await captureSeries(local,"step");
