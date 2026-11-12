@@ -1,31 +1,22 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'">
-<title>Metis</title>
-<link rel="stylesheet" href="styles.css">
-<script defer src="renderer.js"></script>
-</head>
-<body>
+<title>Metis</title><link rel="stylesheet" href="styles.css"><script type="module" src="renderer.js"></script>
+</head><body>
+<div id="motion" aria-hidden="true"></div>
 <main>
-  <img class="logo" src="../assets/brand.png" width="56" height="56" alt="">
-  <p class="brand">Metis</p>
-  <h1 id="heading">Opening Metis.</h1>
-  <p id="description" aria-live="polite">Connecting to the server.</p>
-  <p id="server-label"></p>
-  <form id="form" hidden>
-    <label for="server">Server address</label>
-    <input id="server" name="server" type="url" required autocomplete="url" spellcheck="false" placeholder="https://ai.f1shy312.com">
-    <p id="validation" role="alert"></p>
-    <button type="submit">Open Metis</button>
-  </form>
-  <div id="actions" hidden>
-    <button id="retry">Try again</button>
-    <button id="settings" class="secondary">Change server</button>
+ <header><span class="metis-wordmark" role="img" aria-label="Metis"></span><h1 id="heading">Welcome to Metis.</h1><p id="description" aria-live="polite">Connect. Sign in. Make it yours.</p><p id="server-label"></p></header>
+ <section class="content">
+  <form id="form" hidden><label for="server">Server address</label><input id="server" name="server" type="url" required autocomplete="url" spellcheck="false" placeholder="https://metis.example.com" aria-describedby="validation server-hint"><p id="validation" role="alert"></p><p id="server-hint" class="hint">Use https://, or http://localhost for a local server.</p></form>
+ </section>
+ <footer>
+  <ol id="progress" aria-label="Desktop setup progress"><li data-step="welcome" aria-current="step" aria-label="Welcome"><span></span></li><li data-step="settings" aria-label="Server"><span></span></li><li data-step="loading" aria-label="Account"><span></span></li></ol>
+  <div class="navigation">
+   <div id="welcome" class="buttons"><button id="begin" type="button">Continue</button></div>
+   <div id="form-buttons" class="buttons" hidden><button id="back" type="button" class="secondary">Back</button><button id="connect" type="submit" form="form">Continue</button></div>
+   <div id="actions" class="buttons" hidden><button id="settings" type="button" class="secondary">Back</button><button id="retry" type="button">Continue</button></div>
   </div>
-  <footer>Your Metis. In its own window.</footer>
-</main>
-</body>
-</html>
+ </footer>
+</main></body></html>

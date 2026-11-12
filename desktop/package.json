@@ -14,9 +14,9 @@
     "build:linux": "npm run prepare:client && electron-builder --linux AppImage --x64 --config.npmRebuild=false",
     "build:dir": "npm run prepare:client && electron-builder --dir",
     "pretest": "node -e \"require('electron')\"",
-    "test": "npm run prepare:client && node --test ../tests/*.test.mjs tests/policy.test.cjs tests/reopen.test.cjs tests/file-drop.test.cjs tests/assistant-toggle.test.cjs tests/assistant-regions.test.cjs tests/assistant-shortcuts.test.cjs tests/web-permissions.test.cjs tests/overlay-scene.test.cjs tests/annotation-pointer.test.cjs",
+    "test": "npm run prepare:client && node --test ../tests/*.test.mjs tests/policy.test.cjs tests/client-context.test.cjs tests/reopen.test.cjs tests/file-drop.test.cjs tests/assistant-toggle.test.cjs tests/assistant-regions.test.cjs tests/assistant-shortcuts.test.cjs tests/web-permissions.test.cjs tests/overlay-scene.test.cjs tests/annotation-pointer.test.cjs",
     "check": "node scripts/check.cjs",
-    "test:e2e": "electron tests/native-modules.cjs && electron tests/smoke.cjs && electron tests/unified.cjs && electron tests/assistant.cjs && electron tests/voice-permissions.cjs && electron tests/annotation-overlay.cjs",
+    "test:e2e": "electron tests/native-modules.cjs && electron tests/smoke.cjs && electron tests/unified.cjs && electron tests/assistant.cjs && electron tests/voice-permissions.cjs && electron tests/annotation-overlay.cjs && electron tests/onboarding.cjs && electron tests/onboarding-reduced.cjs",
     "generate:icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
@@ -65,6 +65,7 @@
       "assets/icon.ico",
       "assets/icon.png",
       "assets/brand.png",
+      "assets/metis-wordmark.svg",
       "assets/lucide-LICENSE.txt",
       "node_modules/**/*",
       "package.json",

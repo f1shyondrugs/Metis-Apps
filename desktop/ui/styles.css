@@ -1,20 +1,19 @@
-@font-face{font-family:system;src:local("Segoe UI")}
-:root{color-scheme:dark;font-family:system,"Segoe UI",sans-serif;background:#111111;color:#f0f0ee}
-*{box-sizing:border-box}
-body{margin:0;min-height:100vh;display:grid;place-items:center;padding:40px 24px}
-main{width:100%;max-width:440px}
-.logo{object-fit:contain;margin-bottom:20px}
-.brand{font-size:14px;letter-spacing:.06em;color:#c6c6c0;margin:0 0 26px}
-h1{font-family:Georgia,serif;font-size:36px;font-weight:400;letter-spacing:-.025em;line-height:1.15;margin:0 0 16px}
-p{font-size:15px;line-height:1.65;color:#c6c6c0;margin:0 0 12px}
-#server-label{font-size:13px;overflow-wrap:anywhere;color:#aaa9a3;margin-bottom:28px}
-label{display:block;font-size:14px;margin-bottom:10px}
-input{width:100%;font:inherit;background:#1b1b1a;border:1px solid #55554e;color:#f0f0ee;border-radius:6px;padding:14px}
-button{font:inherit;font-weight:600;background:#f0f0ee;color:#111111;border:1px solid #f0f0ee;padding:12px 18px;border-radius:6px;cursor:pointer}
-button.secondary{background:transparent;color:#f0f0ee;border-color:#55554e}
-button:disabled{opacity:.55;cursor:wait}
-button:focus-visible,input:focus-visible{outline:2px solid #d6ba84;outline-offset:4px}
-#validation{color:#f1ad9a;font-size:14px;min-height:24px;margin:8px 0 14px}
-#actions{display:flex;flex-wrap:wrap;gap:12px}
-footer{font-size:12px;color:#aaa9a3;border-top:1px solid #33332f;padding-top:20px;margin-top:40px}
-[hidden]{display:none!important}
+:root{color-scheme:dark;font-family:system-ui,"Segoe UI",sans-serif;background:#000;color:#fff;--primary:#fff}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:44px 28px}
+#motion{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+main{display:flex;flex-direction:column;gap:28px;width:100%;max-width:640px;min-height:360px;padding:36px;position:relative}header{-webkit-app-region:drag}.content:has(form[hidden]){display:none}
+.metis-wordmark{display:block;width:108px;height:32px;margin-bottom:32px;background-color:currentColor;-webkit-mask:url("../assets/metis-wordmark.svg") center/contain no-repeat;mask:url("../assets/metis-wordmark.svg") center/contain no-repeat}
+h1{font-size:clamp(26px,3.5vw,38px);font-weight:600;letter-spacing:-.035em;line-height:1.15;margin:0 0 16px;text-wrap:balance}
+h2{font-size:19px;font-weight:600;margin:0 0 22px}p{font-size:14px;line-height:1.75;color:#bfbfbf;margin:0 0 12px}
+#server-label{font-size:12px;overflow-wrap:anywhere;color:#bfbfbf;margin:20px 0 0}.content{min-width:0;align-self:center}
+label{display:block;font-size:14px;margin-bottom:10px}input{width:100%;font:inherit;background:#000;border:1px solid #595959;color:#fff;border-radius:8px;padding:14px;min-height:46px}
+button{font:inherit;font-size:14px;font-weight:600;background:#fff;color:#000;border:1px solid #fff;min-height:44px;padding:11px 18px;border-radius:8px;cursor:pointer}
+button.secondary{background:transparent;color:#fff;border-color:#595959}button:disabled{opacity:.55;cursor:wait}button:focus-visible,input:focus-visible{outline:2px solid var(--primary);outline-offset:4px}
+#validation{color:#fff;font-size:13px;min-height:20px;margin:8px 0}.hint{font-size:12px}.buttons{display:flex;align-items:center;gap:8px}.navigation{margin-left:auto;flex-shrink:0}button,input{-webkit-app-region:no-drag}
+.features{margin:0 0 26px;padding:0;list-style:none;display:grid;gap:20px}.features li{display:flex;align-items:center;gap:14px}.features svg{width:22px;height:22px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.features strong{display:block;font-size:14px}.features span{display:block;font-size:13px;color:#bfbfbf;line-height:1.7;margin-top:5px}
+footer{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:auto;padding-top:24px;min-height:68px}
+#progress{display:flex;list-style:none;gap:12px;margin:0;padding:0;font-size:11px;color:#bfbfbf}#progress li{display:flex;align-items:center;gap:6px}#progress span{width:5px;height:5px;border-radius:50%;background:#777;opacity:.5}#progress [aria-current] span{background:var(--primary);opacity:1;transform:scale(1.4)}
+body:not([data-onboarding-ready=true]) main{opacity:0}main[data-transition=out]{opacity:0;transform:translateY(-3px);transition:opacity 110ms ease,transform 110ms ease;pointer-events:none}main[data-transition=in]{animation:enter 280ms cubic-bezier(.2,.8,.2,1) both}
+[hidden]{display:none!important}@keyframes enter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media(max-width:767px){body{padding:32px 18px}main{padding:24px 8px;gap:24px;min-height:340px}.metis-wordmark{margin-bottom:28px}footer{gap:12px}}
+@media(prefers-reduced-motion:reduce){main{opacity:1!important;transform:none!important;animation:none!important;transition:none!important}}

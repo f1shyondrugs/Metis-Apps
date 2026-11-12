@@ -9,16 +9,23 @@ const { registerWebPermissions } = require('./web-permissions.cjs');
 const shellPath = path.join(ROOT, 'ui', 'index.html');
 const shellUrl = pathToFileURL(shellPath).href;
 
-async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}), onAssistant = () => {}, onShortcutsChange = () => {}, onShortcutCapture = () => {}, onCaptureHidden, onAutostart, onCheckUpdates, shouldHide = () => false, initialServer } = {}) {
+async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}), onAssistant = () => {}, onShortcutsChange = () => {}, onShortcutCapture = () => {}, onCaptureHidden, onAutostart, onCheckUpdates, onDesktopPermissions, shouldHide = () => false, initialServer } = {}) {
   const configPath = path.join(app.getPath('userData'), 'server.json');
   let server = initialServer ? normalizeServer(initialServer) : DEFAULT_SERVER;
-  try { server = normalizeServer(JSON.parse(fs.readFileSync(configPath, 'utf8')).url); } catch {}
-  const win = new BrowserWindow({
+  let serverConfigured=Boolean(initialServer);
+  try { server = normalizeServer(JSON.parse(fs.readFileSync(configPath, 'utf8')).url);serverConfigured=true; } catch {}
+  let context;
+  try { context=require('./client-context.cjs').clientContext(app.getPath('userData')); }
+  catch { context=Object.freeze({installationId:''}); } // Optional identity must never stop an existing background client.
+  let launcher = !serverConfigured;
+  const windowOptions = {
     width: 1360, height: 900, minWidth: 600, minHeight: 480,
     title: 'Metis', icon: path.join(ROOT, 'assets', 'icon.png'),
-    backgroundColor: '#111111',
+    backgroundColor: '#000000',
     webPreferences: { preload: path.join(__dirname, 'web-preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false }
-  });
+  };
+  let win = new BrowserWindow({...windowOptions, frame:!launcher, autoHideMenuBar:launcher});
+  win.setMenuBarVisibility(!launcher);
   let view;
   let dropCleanup=()=>{};
   let dropState={available:false,error:''};
@@ -38,9 +45,9 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
     onError: error => { dropState={available:false,error:String(error.message||'File drops are unavailable. Use Attach files.').slice(0,512)}; }
   });dropRegistered=true; } catch(error) { dropState={available:false,error:'File drops are unavailable. Use Attach files.'};if(process.env.METIS_DROP_TEST_ROOT)console.error('DROP_HELPER_SETUP_ERROR',error); }};
   let generation = 0;
-  let state = { mode: 'loading', server, message: '' };
+  let state = { mode: serverConfigured ? 'loading' : 'welcome', server, message: '', firstRun:!serverConfigured };
   const update = (mode, message = '') => {
-    state = { mode, server, message };
+    state = { mode, server, message, firstRun:!serverConfigured };
     if (!win.isDestroyed()) win.webContents.send('desktop:state-changed', state);
   };
   const disposeView = () => {
@@ -88,8 +95,31 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
     contents.on('will-redirect', navigation);
     contents.on('page-title-updated', (event) => { event.preventDefault(); win.setTitle('Metis'); });
     contents.on('did-finish-load', () => {
-      if (generation !== currentGeneration) return;
-      remote.setVisible(true); update('ready'); refreshDropTarget(); contents.focus();
+      void (async () => {
+        if (generation !== currentGeneration) return;
+        if (launcher) {
+          // Frame style is immutable. Transfer the existing authorized WebContents
+          // into the ordinary app host, without reloading login or touching data.
+          const previous = win;
+          const next = new BrowserWindow({...windowOptions, ...previous.getBounds(), show:false});
+          next.setMenuBarVisibility(true);
+          previous.contentView.removeChildView(remote);
+          next.contentView.addChildView(remote);
+          win = next; launcher = false; bindWindow(next); resize();
+          try { await next.loadFile(shellPath); }
+          catch(error) {
+            if (!previous.isDestroyed() && !next.isDestroyed()) {
+              next.contentView.removeChildView(remote); previous.contentView.addChildView(remote);
+              win = previous; launcher = true; next.destroy(); resize();
+            }
+            throw error;
+          }
+          previous.destroy();
+          if (generation !== currentGeneration || next.isDestroyed()) return;
+          next.show(); next.focus();
+        }
+        remote.setVisible(true); update('ready'); refreshDropTarget(); contents.focus();
+      })().catch(() => failure('The workspace window could not be opened. Try again.'));
     });
     const failure = (message) => {
       if (generation !== currentGeneration || win.isDestroyed()) return;
@@ -119,6 +149,10 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
         !sameOrigin(event.senderFrame.url, server)) throw new Error('Access denied.');
   }
   const handlers = {
+    'desktop:onboarding-context': event => {assertRemote(event);return {...context,server};},
+    'desktop:open-server-settings': event => {assertRemote(event);setTimeout(settings,0);},
+    'desktop:request-desktop-permissions': event => {assertRemote(event);if(!onDesktopPermissions)throw new Error('Permission checks are unavailable.');return onDesktopPermissions();},
+    'desktop:welcome': event => {assertLocal(event);disposeView();update('welcome');},
     'desktop:set-capture-hidden': (event,value) => {
       assertRemote(event);
       if (typeof value !== 'boolean' || !onCaptureHidden) throw new Error('Invalid capture preference.');
@@ -168,7 +202,7 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
         fs.mkdirSync(path.dirname(configPath), { recursive: true });
         fs.writeFileSync(configPath + '.tmp', JSON.stringify({ url: next }, null, 2));
         fs.renameSync(configPath + '.tmp', configPath);
-        server = next; void load();
+        server = next; serverConfigured=true;void load();
         return { ok: true };
       } catch (error) { return { ok: false, error: error.message }; }
     },
@@ -176,8 +210,6 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
     'desktop:settings': (event) => { assertLocal(event); settings(); }
   };
   for (const [channel, handler] of Object.entries(handlers)) ipcMain.handle(channel, handler);
-  win.webContents.on('will-navigate', (event) => event.preventDefault());
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { label: 'Metis', submenu: [
@@ -198,16 +230,22 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
       { role: 'zoomOut', label: 'Zoom out' }
     ] }
   ]));
-  win.on('resize', resize);
-  win.on('close', event => { if (shouldHide()) { event.preventDefault(); win.hide(); } });
-  win.on('closed', () => {
-    dropCleanup();
-    disposeView();
-    for (const channel of Object.keys(handlers)) ipcMain.removeHandler(channel);
-  });
+  if (launcher) win.setMenu(null); // Alt must not reveal a hidden native menu on the splash.
+  function bindWindow(host) {
+    host.webContents.on('will-navigate', event => event.preventDefault());
+    host.webContents.setWindowOpenHandler(() => ({action:'deny'}));
+    host.on('resize', resize);
+    host.on('close', event => { if (shouldHide()) { event.preventDefault(); host.hide(); } });
+    host.on('closed', () => {
+      if (host !== win) return; // Retiring the splash must not close the app view.
+      dropCleanup(); disposeView();
+      for (const channel of Object.keys(handlers)) ipcMain.removeHandler(channel);
+    });
+  }
+  bindWindow(win);
   await win.loadFile(shellPath);
-  const initialLoad = load();
-  return { win, getView: () => view, getState: () => state, getFileDropState:()=>({...dropState}), settings, load, initialLoad };
+  const initialLoad = serverConfigured ? load() : Promise.resolve(update('welcome'));
+  return { get win(){return win;}, getView: () => view, getState: () => state, getFileDropState:()=>({...dropState}), settings, load, initialLoad };
 }
 function bootstrap() {
   app.commandLine.appendSwitch('lang', 'en-US');

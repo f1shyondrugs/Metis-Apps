@@ -83,6 +83,9 @@ async function main() {
   assert.equal(hub.isVisible(), true);
   console.log('WEB_SETTINGS_OPENS_LOCAL_DEVICE_HUB_OK');
   await waitFor(() => !hub.webContents.isLoading());
+  const headerBrand=await hub.webContents.executeJavaScript('(async()=>{const el=document.querySelector(".metis-wordmark"),img=new Image();img.src=new URL("./assets/metis-wordmark.svg",location.href).href;await img.decode();return {label:el.getAttribute("aria-label"),mask:getComputedStyle(el).maskImage,width:el.getBoundingClientRect().width,decoded:img.naturalWidth>0};})()');
+  assert.equal(headerBrand.label,"Metis");assert.equal(headerBrand.width,72);assert.ok(headerBrand.mask.includes("metis-wordmark.svg")&&headerBrand.decoded);
+  console.log("DEVICE_SETTINGS_WEB_WORDMARK_LOADED_OK");
   const state = await hub.webContents.executeJavaScript('metis.state()');
   assert.equal(state.paired, true); assert.equal(state.credential, undefined);
   console.log('SEPARATE_RENDERERS_AND_IPC_OK');

@@ -22,7 +22,7 @@ let desktopOpening;
 let assistant;
 async function showDesktop() {
   if (!desktop || desktop.win.isDestroyed()) {
-    desktopOpening ||= createDesktop({ initialServer: config?.server, onDevices: showWindow, onDeviceState: publicState, onAssistant: () => assistant?.open(), onShortcutsChange: setDesktopShortcuts, onShortcutCapture: value => assistant?.pauseShortcuts(value), onCaptureHidden: setOverlayCaptureHidden, onAutostart: setAutostart, onCheckUpdates: checkUpdates, shouldHide: () => !quitting })
+    desktopOpening ||= createDesktop({ initialServer: config?.server, onDevices: showWindow, onDeviceState: publicState, onAssistant: () => assistant?.open(), onShortcutsChange: setDesktopShortcuts, onShortcutCapture: value => assistant?.pauseShortcuts(value), onCaptureHidden: setOverlayCaptureHidden, onAutostart: setAutostart, onCheckUpdates: checkUpdates, onDesktopPermissions: async () => {await desktopPermissionStatus(true);await probeDesktop();return publicState();}, shouldHide: () => !quitting })
       .then(value => { desktop = value; return value; }).finally(() => { desktopOpening = null; });
     await desktopOpening;
   }
