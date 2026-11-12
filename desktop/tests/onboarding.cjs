@@ -31,6 +31,16 @@ async function run(){
  assert.equal(await local.executeJavaScript('document.querySelector("#motion svg [data-onboarding-geometry]").getAttribute("stroke")'),"none");
  assert.equal(await local.executeJavaScript('document.querySelectorAll("#motion svg > g > rect").length'),1);
  console.log("WHITE_DOTS_ONLY_WITHOUT_CONTINUOUS_BORDER_OK");
+ assert.equal(await local.executeJavaScript('document.querySelector("#motion feGaussianBlur").getAttribute("stdDeviation")'),"8");
+ assert.notEqual(await local.executeJavaScript('getComputedStyle(document.querySelector("#motion [data-onboarding-glow]")).filter'),"none");
+ console.log("SOFT_WHITE_EDGE_GLOW_WITHOUT_OUTLINE_OK");
+ const glowingImage=await local.capturePage(),glowSize=glowingImage.getSize(),glowPixel=(Math.floor(glowSize.height/2)*glowSize.width+24)*4;
+ const glowPaint=glowingImage.getBitmap()[glowPixel];
+ await local.executeJavaScript('document.querySelector("#motion [data-onboarding-glow]").style.display="none"');
+ const noGlowPaint=(await local.capturePage()).getBitmap()[glowPixel];
+ await local.executeJavaScript('document.querySelector("#motion [data-onboarding-glow]").style.removeProperty("display")');
+ assert.ok(glowPaint>noGlowPaint,"Real rendered pixel beyond the sharp dot band must contain only the soft glow");
+ console.log("SOFT_EDGE_GLOW_ACTUAL_PIXEL_VERIFIED");
  const before=await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")');
  await new Promise(resolve=>setTimeout(resolve,120));const after=await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")');if(process.env.METIS_ONBOARDING_REDUCED==="1"){assert.equal(before,after);assert.equal(await local.executeJavaScript('getComputedStyle(document.querySelector(".content")).animationName'),"none");console.log("ONBOARDING_REDUCED_MOTION_STATIC_OK");}else assert.notEqual(before,after);
  fs.mkdirSync(path.join(__dirname,"..","test-results"),{recursive:true});fs.writeFileSync(path.join(__dirname,"..","test-results","onboarding-welcome.png"),(await local.capturePage()).toPNG());
