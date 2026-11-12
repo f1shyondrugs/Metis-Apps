@@ -27,6 +27,7 @@ async function run(){
  const invalid=await local.executeJavaScript('metisDesktop.connect("https://user:password@example.invalid/")');assert.equal(invalid.ok,false);
  const ok=await local.executeJavaScript("metisDesktop.connect("+JSON.stringify(server)+")");assert.equal(ok.ok,true);
  await wait(()=>desktop.getState().mode==="ready");
+ assert.equal(await local.executeJavaScript('Boolean(document.querySelector("#motion svg"))'),false,"Covered launcher must stop its animation");
  let contents=desktop.getView().webContents;
  assert.match(await contents.executeJavaScript("document.body.textContent"),/Fresh Metis server setup/);
  const context=await contents.executeJavaScript("metisApp.onboardingContext()");

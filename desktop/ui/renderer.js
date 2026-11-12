@@ -1,9 +1,10 @@
 import {mountOnboardingMotion} from "./onboarding-motion.js";
 const api=window.metisDesktop,byId=id=>document.getElementById(id);
-const dispose=mountOnboardingMotion(byId("motion"));addEventListener("pagehide",dispose,{once:true});
+let dispose=mountOnboardingMotion(byId("motion"));addEventListener("pagehide",()=>dispose?.(),{once:true});
 let current;
 function render(state){
  const previous=current;current=state;
+ if(state.mode==="ready"){dispose?.();dispose=null;}else if(!dispose)dispose=mountOnboardingMotion(byId("motion"));
  byId("welcome").hidden=state.mode!=="welcome";
  byId("form").hidden=state.mode!=="settings";
  byId("actions").hidden=!["loading","error"].includes(state.mode);
