@@ -8,6 +8,12 @@ app.setPath("userData",root);app.setName("Metis onboarding test");app.setAppUser
 const {createDesktop}=require("../src/main/web-window.cjs");
 const wait=async predicate=>{for(let i=0;i<200;i++){if(await predicate())return;await new Promise(resolve=>setTimeout(resolve,40));}throw Error("Onboarding wait timed out");};
 let desktop,fixture,foreign;
+async function captureSeries(contents,name,count=14){
+ if(process.env.METIS_CAPTURE_ONBOARDING_MOTION!=="1")return;
+ const folder=path.join(__dirname,"..","test-results","transition-media");fs.mkdirSync(folder,{recursive:true});
+ const frames=[];for(let i=0;i<count;i++){const at=Date.now(),file=name+"-"+String(i).padStart(2,"0")+".png";fs.writeFileSync(path.join(folder,file),(await contents.capturePage()).toPNG());frames.push({file,at});await new Promise(resolve=>setTimeout(resolve,45));}
+ fs.writeFileSync(path.join(folder,name+".json"),JSON.stringify(frames));
+}
 const timeout=setTimeout(()=>{console.error("ONBOARDING_TIMEOUT");app.exit(1);},60000);
 async function run(){
  await app.whenReady();
@@ -19,6 +25,10 @@ async function run(){
  assert.equal(desktop.getState().mode,"welcome");assert.equal(desktop.getView(),undefined);
  const local=desktop.win.webContents;
  await wait(()=>local.executeJavaScript('Boolean(document.querySelector("#motion svg path"))'));
+ await captureSeries(local,"intro");
+ await wait(()=>local.executeJavaScript('document.getElementById("motion").dataset.onboardingEntrance==="done"'));
+ assert.equal(await local.executeJavaScript('document.body.dataset.onboardingReady'),"true");
+ console.log("NATIVE_LOAD_READY_EDGE_ENTRANCE_COMPLETED_OK");
  assert.equal(await local.executeJavaScript('document.getElementById("heading").textContent'),"Welcome to Metis.");
  assert.equal(await local.executeJavaScript('getComputedStyle(document.documentElement).backgroundColor'),"rgb(0, 0, 0)");
  assert.equal(await local.executeJavaScript('getComputedStyle(document.documentElement).getPropertyValue("--primary").trim()'),"#fff");
@@ -45,6 +55,10 @@ async function run(){
  await new Promise(resolve=>setTimeout(resolve,120));const after=await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")');if(process.env.METIS_ONBOARDING_REDUCED==="1"){assert.equal(before,after);assert.equal(await local.executeJavaScript('getComputedStyle(document.querySelector(".content")).animationName'),"none");console.log("ONBOARDING_REDUCED_MOTION_STATIC_OK");}else assert.notEqual(before,after);
  fs.mkdirSync(path.join(__dirname,"..","test-results"),{recursive:true});fs.writeFileSync(path.join(__dirname,"..","test-results","onboarding-welcome.png"),(await local.capturePage()).toPNG());
  await local.executeJavaScript('document.getElementById("begin").click()');await wait(()=>desktop.getState().mode==="settings");
+ await captureSeries(local,"step");
+ await wait(()=>local.executeJavaScript('document.getElementById("form").hidden===false'));
+ assert.equal(await local.executeJavaScript('document.activeElement.id'),"server");
+ console.log("NATIVE_FADE_STEP_AND_INPUT_FOCUS_OK");
  const invalid=await local.executeJavaScript('metisDesktop.connect("https://user:password@example.invalid/")');assert.equal(invalid.ok,false);
  const ok=await local.executeJavaScript("metisDesktop.connect("+JSON.stringify(server)+")");assert.equal(ok.ok,true);
  await wait(()=>desktop.getState().mode==="ready");
@@ -59,6 +73,7 @@ async function run(){
  console.log("FRESH_DESKTOP_DOMAIN_AND_SERVER_SETUP_OK");
  // Opening settings intentionally destroys this remote WebContents. Observe the surviving owner, not its evaluation reply.
  void contents.executeJavaScript("metisApp.openServerSettings()").catch(()=>{});await wait(()=>desktop.getState().mode==="settings");
+ await wait(()=>local.executeJavaScript('document.getElementById("form").hidden===false'));
  assert.equal(await local.executeJavaScript('document.getElementById("server").value'),server);
  await desktop.load();contents=desktop.getView().webContents;
  foreign=http.createServer((req,res)=>res.end("<h1>Foreign origin</h1>"));await new Promise(resolve=>foreign.listen(0,"127.0.0.1",resolve));
