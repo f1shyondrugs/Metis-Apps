@@ -611,6 +611,14 @@ function setupUpdates() {
   setInterval(check, 6 * 60 * 60 * 1000);
 }
 
+void (async()=>{
+await app.whenReady();
+if(process.platform==="win32"){
+ try{
+  const value=await runPowerShell("$identity = [Security.Principal.WindowsIdentity]::GetCurrent(); $principal = [Security.Principal.WindowsPrincipal]::new($identity); $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)");
+  windowsElevation=value==="True"?"administrator":value==="False"?"user":"unknown";
+ }catch{windowsElevation="unknown";}
+}
 if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
   const { forwardSecondInstance } = require("./src/main/reopen.cjs");
   void forwardSecondInstance({
@@ -716,5 +724,6 @@ if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
   });
   app.on("window-all-closed", () => {});
 }
+})().catch(error=>{dialog.showErrorBox(APP_NAME,error.message||"Metis could not start.");app.quit();});
 
 module.exports = { showDesktop, showWindow, getDesktop: () => desktop, getDeviceWindow: () => window, getRuntimePid: () => runtime?.pid, getAssistant: () => assistant, getAnnotationOverlay: () => annotationOverlay, publicState };
