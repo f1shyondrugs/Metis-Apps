@@ -29,6 +29,22 @@ async function run(){
  await wait(()=>local.executeJavaScript('document.getElementById("motion").dataset.onboardingEntrance==="done"'));
  assert.equal(await local.executeJavaScript('document.body.dataset.onboardingReady'),"true");
  console.log("NATIVE_LOAD_READY_EDGE_ENTRANCE_COMPLETED_OK");
+ assert.ok(require("../package.json").build.files.includes("assets/metis-wordmark.svg"));
+ const logoInfo=await local.executeJavaScript('(async()=>{const el=document.querySelector(".metis-wordmark"),image=new Image();image.src=new URL("../assets/metis-wordmark.svg",location.href).href;await image.decode();const r=el.getBoundingClientRect();return {label:el.getAttribute("aria-label"),mask:getComputedStyle(el).maskImage,width:r.width,height:r.height,x:r.x,y:r.y,naturalWidth:image.naturalWidth};})()');
+ assert.equal(logoInfo.label,"Metis");assert.ok(logoInfo.mask.includes("metis-wordmark.svg"));assert.equal(logoInfo.width,108);assert.equal(logoInfo.height,32);assert.ok(logoInfo.naturalWidth>0);
+ const logoImage=await local.capturePage({x:Math.floor(logoInfo.x),y:Math.floor(logoInfo.y),width:108,height:32}),logoBytes=logoImage.getBitmap();
+ let logoPaint=0;for(let i=0;i<logoBytes.length;i+=4)if(logoBytes[i]>180)logoPaint++;
+ assert.ok(logoPaint>80&&logoPaint<2000,"Canonical vector wordmark must paint as glyphs, not a blank or solid rectangle");
+ const originalSize=desktop.win.getContentSize(),originalMinimum=desktop.win.getMinimumSize();
+ // Isolated test window only: exercise CSS at mobile width without changing product window constraints.
+ desktop.win.setMinimumSize(0,0);
+ for(const width of [390,768,1440]){
+  desktop.win.setContentSize(width,width===390?844:1000);await wait(()=>local.executeJavaScript("innerWidth==="+width));await new Promise(resolve=>setTimeout(resolve,100));
+  const layout=await local.executeJavaScript('({overflow:document.documentElement.scrollWidth>innerWidth+1,width:document.querySelector(".metis-wordmark").getBoundingClientRect().width})');
+  assert.equal(layout.overflow,false);assert.equal(layout.width,108);console.log("WORDMARK_RESPONSIVE_OK",width);
+ }
+ desktop.win.setMinimumSize(...originalMinimum);desktop.win.setContentSize(...originalSize);await wait(()=>local.executeJavaScript("innerWidth==="+originalSize[0]));await new Promise(resolve=>setTimeout(resolve,100));
+ console.log("CANONICAL_WEB_WORDMARK_DECODED_AND_PAINTED_OK",logoPaint);
  assert.equal(await local.executeJavaScript('document.getElementById("heading").textContent'),"Welcome to Metis.");
  assert.equal(await local.executeJavaScript('getComputedStyle(document.documentElement).backgroundColor'),"rgb(0, 0, 0)");
  assert.equal(await local.executeJavaScript('getComputedStyle(document.documentElement).getPropertyValue("--primary").trim()'),"#fff");

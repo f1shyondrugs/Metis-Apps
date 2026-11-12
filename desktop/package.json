@@ -65,6 +65,7 @@
       "assets/icon.ico",
       "assets/icon.png",
       "assets/brand.png",
+      "assets/metis-wordmark.svg",
       "assets/lucide-LICENSE.txt",
       "node_modules/**/*",
       "package.json",

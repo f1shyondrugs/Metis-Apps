@@ -34,6 +34,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .brand > span { color: var(--text); margin: 0; }
 .brand strong { color: var(--text); font-family: Georgia, "Times New Roman", serif; font-size: 18px; font-weight: 600; letter-spacing: -.04em; }
 .brand span { font-size: 11px; color: var(--muted-text); margin-top: 3px; }
+.brand .metis-wordmark { width:72px; height:26px; margin:0 0 3px; background-color:currentColor; color:var(--text); -webkit-mask:url("./assets/metis-wordmark.svg") center/contain no-repeat; mask:url("./assets/metis-wordmark.svg") center/contain no-repeat; }
 .topbar-right { font-size: 12px; white-space: nowrap; }
 .connection-status, .settings-nav { display: inline-flex; align-items: center; gap: 8px; }
 .settings-nav { min-height: 44px; }
