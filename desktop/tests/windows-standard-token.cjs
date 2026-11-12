@@ -22,6 +22,10 @@ function launchStandard(executable,args,{env=process.env,cwd=process.cwd()}={}){
   const command=wide([executable,...args].map(value=>'"'+value.replace(/"/g,'')+'"').join(' '));
   if(!create(ptr(restricted),wide(executable),command,null,null,true,0x400,environment,wide(cwd),startup,result))throw Error('Test standard launch '+last());
   close(Number(result.readBigUInt64LE(8)));
+  // Give only this isolated test process normal foreground eligibility. A High
+  // CI console is not a user click and otherwise blocks Medium focus tests.
+  const allowed=koffi.load('user32.dll').func('bool AllowSetForegroundWindow(uint32_t)')(0xFFFFFFFF);
+  console.log('TEST_FOREGROUND_ELIGIBILITY',Boolean(allowed));
   return {pid:result.readUInt32LE(16),handle:Number(result.readBigUInt64LE()),close};
  }finally{if(ptr(sid))kernel.func('uintptr_t LocalFree(uintptr_t)')(ptr(sid));if(ptr(restricted))close(ptr(restricted));if(ptr(original))close(ptr(original));}
 }
