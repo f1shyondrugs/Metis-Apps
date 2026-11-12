@@ -9,10 +9,14 @@ const { registerWebPermissions } = require('./web-permissions.cjs');
 const shellPath = path.join(ROOT, 'ui', 'index.html');
 const shellUrl = pathToFileURL(shellPath).href;
 
-async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}), onAssistant = () => {}, onShortcutsChange = () => {}, onShortcutCapture = () => {}, onCaptureHidden, onAutostart, onCheckUpdates, shouldHide = () => false, initialServer } = {}) {
+async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}), onAssistant = () => {}, onShortcutsChange = () => {}, onShortcutCapture = () => {}, onCaptureHidden, onAutostart, onCheckUpdates, onDesktopPermissions, shouldHide = () => false, initialServer } = {}) {
   const configPath = path.join(app.getPath('userData'), 'server.json');
   let server = initialServer ? normalizeServer(initialServer) : DEFAULT_SERVER;
-  try { server = normalizeServer(JSON.parse(fs.readFileSync(configPath, 'utf8')).url); } catch {}
+  let serverConfigured=Boolean(initialServer);
+  try { server = normalizeServer(JSON.parse(fs.readFileSync(configPath, 'utf8')).url);serverConfigured=true; } catch {}
+  let context;
+  try { context=require('./client-context.cjs').clientContext(app.getPath('userData')); }
+  catch { context=Object.freeze({installationId:''}); } // Optional identity must never stop an existing background client.
   const win = new BrowserWindow({
     width: 1360, height: 900, minWidth: 600, minHeight: 480,
     title: 'Metis', icon: path.join(ROOT, 'assets', 'icon.png'),
@@ -38,9 +42,9 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
     onError: error => { dropState={available:false,error:String(error.message||'File drops are unavailable. Use Attach files.').slice(0,512)}; }
   });dropRegistered=true; } catch(error) { dropState={available:false,error:'File drops are unavailable. Use Attach files.'};if(process.env.METIS_DROP_TEST_ROOT)console.error('DROP_HELPER_SETUP_ERROR',error); }};
   let generation = 0;
-  let state = { mode: 'loading', server, message: '' };
+  let state = { mode: serverConfigured ? 'loading' : 'welcome', server, message: '', firstRun:!serverConfigured };
   const update = (mode, message = '') => {
-    state = { mode, server, message };
+    state = { mode, server, message, firstRun:!serverConfigured };
     if (!win.isDestroyed()) win.webContents.send('desktop:state-changed', state);
   };
   const disposeView = () => {
@@ -119,6 +123,10 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
         !sameOrigin(event.senderFrame.url, server)) throw new Error('Access denied.');
   }
   const handlers = {
+    'desktop:onboarding-context': event => {assertRemote(event);return {...context,server};},
+    'desktop:open-server-settings': event => {assertRemote(event);setTimeout(settings,0);},
+    'desktop:request-desktop-permissions': event => {assertRemote(event);if(!onDesktopPermissions)throw new Error('Permission checks are unavailable.');return onDesktopPermissions();},
+    'desktop:welcome': event => {assertLocal(event);disposeView();update('welcome');},
     'desktop:set-capture-hidden': (event,value) => {
       assertRemote(event);
       if (typeof value !== 'boolean' || !onCaptureHidden) throw new Error('Invalid capture preference.');
@@ -168,7 +176,7 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
         fs.mkdirSync(path.dirname(configPath), { recursive: true });
         fs.writeFileSync(configPath + '.tmp', JSON.stringify({ url: next }, null, 2));
         fs.renameSync(configPath + '.tmp', configPath);
-        server = next; void load();
+        server = next; serverConfigured=true;void load();
         return { ok: true };
       } catch (error) { return { ok: false, error: error.message }; }
     },
@@ -206,7 +214,7 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
     for (const channel of Object.keys(handlers)) ipcMain.removeHandler(channel);
   });
   await win.loadFile(shellPath);
-  const initialLoad = load();
+  const initialLoad = serverConfigured ? load() : Promise.resolve(update('welcome'));
   return { win, getView: () => view, getState: () => state, getFileDropState:()=>({...dropState}), settings, load, initialLoad };
 }
 function bootstrap() {

@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('metisDesktop', {
   connect: (url) => ipcRenderer.invoke('desktop:connect', url),
   retry: () => ipcRenderer.invoke('desktop:retry'),
   settings: () => ipcRenderer.invoke('desktop:settings'),
+  welcome: () => ipcRenderer.invoke('desktop:welcome'),
   onState: (callback) => {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('desktop:state-changed', listener);
