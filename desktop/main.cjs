@@ -416,15 +416,16 @@ async function startRuntime() {
   runtime = startHost({
     utilityProcess,
     receiveNotification: createNotificationReceiver({
-      config, configPath:configPath(),
+      config:selected, configPath:configPath(),
       available:()=>status.desktopAvailable&&Notification.isSupported(),
-      show:notification=>showNativeNotification({Notification,openChat:openDesktopChat,server:config.server,notification})
+      show:notification=>showNativeNotification({Notification,openChat:openDesktopChat,server:selected.server,notification})
     }),
-    config,
+    config:selected,
     configPath: configPath(),
     capabilities: { desktopAvailable: status.desktopAvailable, overlayAnnotations: Boolean(annotationOverlay && status.desktopAvailable), nativeNotifications: screen.getAllDisplays().length > 0 && Notification.isSupported() },
-    showNotification: notification => showNativeNotification({ Notification, openChat: openDesktopChat, server: config.server, notification }),
+    showNotification: notification => showNativeNotification({ Notification, openChat: openDesktopChat, server: selected.server, notification }),
     onEvent(event) {
+      if(epoch!==runtimeEpoch||config!==selected||quitting)return;
       if(event.type==="device_access"){status.deviceElevation=event.elevation;broadcast();return;}
       if (event.type === "desktop_overlay") {
         if (!annotationOverlay) throw new Error("Desktop annotations are not available");

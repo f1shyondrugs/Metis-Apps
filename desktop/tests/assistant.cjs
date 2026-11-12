@@ -50,9 +50,11 @@ async function main(){
  await wc.executeJavaScript('for(const id of ["test-pane","test-hidden","test-popup"])document.getElementById(id).remove()');
  ipcMain.removeListener('assistant:regions',measure);
  console.log('ASSISTANT_PORTALED_POPOVER_GEOMETRY_AND_REPOSITION_OK');
+ const releaseOwnForeground=await require('./own-foreground.cjs').ownForeground();
  assistant.close(); await assistant.open();
  await wc.executeJavaScript('metisAssistant.configure({voiceConfigured:false,chatId:"fixture-chat"})');
  assert.equal(win.isFocusable(),true);
+ releaseOwnForeground();
  console.log('ASSISTANT_WITHOUT_VOICE_AUTOFOCUSES_OK');
  assistant.setHideFromCapture(false);
  assert.equal(win.isContentProtected(),false);
