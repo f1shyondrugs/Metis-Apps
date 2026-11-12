@@ -371,10 +371,13 @@ byId("pair-form").addEventListener("submit", async (event) => {
   }
 });
 byId("restart-as-administrator").addEventListener("click",async()=>{
- const button=byId("restart-as-administrator");button.disabled=true;
+ const button=byId("restart-as-administrator");button.disabled=true;button.setAttribute("aria-busy","true");button.textContent="Waiting for Windows…";
  try{setConnection(await window.metis.restartAsAdministrator());}
- catch(error){showHubError(error.message||"Windows approval was not confirmed. The desktop app and saved pairing are unchanged.");}
- finally{button.disabled=false;}
+ catch(error){
+  const message=error.message||"Windows approval was not confirmed. The desktop app and saved pairing are unchanged.";
+  if(state.paired)showHubError(message);else{byId("pair-error").textContent=message;byId("pair-error").hidden=false;}
+ }
+ finally{button.disabled=false;button.removeAttribute("aria-busy");button.textContent="Enable Administrator Remote Client";}
 });
 byId("refresh").addEventListener("click", () => void refresh());
 byId("check-permissions")?.addEventListener("click", () => void refreshDesktopPermissions(false));

@@ -96,8 +96,9 @@ const administratorHost=require("./src/device/admin-controller.cjs").createAdmin
 async function enableAdministratorClient() {
  if(process.platform!=="win32")throw Error("Administrator device access is available on Windows only.");
  if(getWindowsElevation()!=="user")throw Error("Open the desktop app normally before connecting its background Administrator Remote Client.");
+ const selected=config;
  await administratorHost.ensure();
- if(config?.permissionMode==="admin")await startRuntime();
+ if(config===selected&&config?.permissionMode==="admin"&&!quitting)await startRuntime();
  return publicState();
 }
 
@@ -148,6 +149,8 @@ app.setPath("userData", userDataDir);
 let window;
 let tray;
 let runtime;
+let runtimeEpoch=0;
+let pairingEpoch=0;
 let computerUseOverlay;
 let annotationOverlay;
 let overlayPreferences;
@@ -388,6 +391,11 @@ function stopComputerUseCursor() {
 }
 
 async function startRuntime() {
+  const epoch=++runtimeEpoch,selected=config;
+  if(!selected||status.accessMismatch)return;
+  // Keep an existing User connection alive while an admin consent is pending.
+  if(process.platform==="win32"&&selected.permissionMode==="admin")await administratorHost.ensure();
+  if(epoch!==runtimeEpoch||config!==selected||quitting)return;
   status.deviceElevation=null;
   annotationOverlay?.clearAll();
   computerUseOverlay?.hide();
@@ -397,13 +405,13 @@ async function startRuntime() {
   computerUseOverlay?.setAppearance(currentAppearance);
   broadcast();
   if (!config || status.accessMismatch) return;
-  if(process.platform==="win32"&&config.permissionMode==="admin")await administratorHost.ensure();
   const { startDeviceHost } = require("./src/device/runtime.cjs");
   const { showNativeNotification } = require("./notification-native.cjs");
   const startHost=process.platform==="win32"&&config.permissionMode==="admin"
     ? options=>require("./src/device/admin-controller.cjs").attachAdminRuntime(administratorHost,options)
     : startDeviceHost;
   const { createNotificationReceiver } = await import(pathToFileURL(path.join(__dirname, "notification-client.mjs")).href);
+  if(epoch!==runtimeEpoch||config!==selected||quitting)return;
   runtime = startHost({
     utilityProcess,
     receiveNotification: createNotificationReceiver({
@@ -484,6 +492,7 @@ function registerIpc() {
   handle("hub:restart-as-administrator", () => enableAdministratorClient());
   handle("hub:snapshot", () => fetchSnapshot());
   handle("hub:pair", async (_event, input) => {
+    const revision=++pairingEpoch;
     const server = normalizeServer(input?.server).replace(/\/+$/, "");
     const token = String(input?.token || "").trim();
     let parsed;
@@ -498,6 +507,7 @@ function registerIpc() {
       if (permissionMode === "admin" && !elevated) await administratorHost.ensure();
       if (permissionMode === "user" && elevated) throw new Error("User access was selected in Metis. Quit Metis from the tray, then start normally without administrator rights and enter the same code.");
     }
+    if(revision!==pairingEpoch||quitting)throw Error("Pairing was cancelled.");
     const response = await fetch(`${parsed.origin}/api/remote-clients/enroll`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -519,6 +529,7 @@ function registerIpc() {
       signal: AbortSignal.timeout(15_000),
     });
     const data = await response.json();
+    if(revision!==pairingEpoch||quitting)throw Error("Pairing was cancelled.");
     if (!response.ok || !data.client?.id || !data.credential) {
       throw new Error(data.error || "Pairing failed");
     }
@@ -534,6 +545,7 @@ function registerIpc() {
     return publicState();
   });
   handle("hub:unpair", async () => {
+    ++pairingEpoch;++runtimeEpoch;
     computerUseOverlay?.hide();
     runtime?.stop();
     runtime = null;
@@ -737,10 +749,11 @@ if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
     // before the normal app exits; channel loss also stops the elevated host.
     if(process.platform==="win32"&&administratorHost.connected&&!shutdownFinished){
       event.preventDefault();
-      if(!shutdownStarted){shutdownStarted=true;administratorHost.shutdown();setTimeout(()=>{shutdownFinished=true;app.quit();},400);}
+      if(!shutdownStarted){shutdownStarted=true;quitting=true;++runtimeEpoch;++pairingEpoch;administratorHost.shutdown();setTimeout(()=>{shutdownFinished=true;app.quit();},400);}
       return;
     }
     activationListener?.close();
+    ++runtimeEpoch;++pairingEpoch;
     quitting = true;
     computerUseOverlay?.hide();
     assistant?.destroy();
