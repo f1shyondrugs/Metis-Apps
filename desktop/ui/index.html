@@ -4,7 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'">
 <title>Metis</title><link rel="stylesheet" href="styles.css"><script type="module" src="renderer.js"></script>
-</head><body>
+</head><body><div class="window-drag-region" aria-hidden="true"></div>
 <div id="motion" aria-hidden="true"></div>
 <main>
  <header><span class="metis-wordmark" role="img" aria-label="Metis"></span><h1 id="heading">Welcome to Metis.</h1><p id="description" aria-live="polite">Connect. Sign in. Make it yours.</p><p id="server-label"></p></header>
@@ -14,7 +14,7 @@
  <footer>
   <ol id="progress" aria-label="Desktop setup progress"><li data-step="welcome" aria-current="step" aria-label="Welcome"><span></span></li><li data-step="settings" aria-label="Server"><span></span></li><li data-step="loading" aria-label="Account"><span></span></li></ol>
   <div class="navigation">
-   <div id="welcome" class="buttons"><button id="begin" type="button">Continue</button></div>
+   <div id="welcome" class="buttons"><button id="begin" type="button">Start</button></div>
    <div id="form-buttons" class="buttons" hidden><button id="back" type="button" class="secondary">Back</button><button id="connect" type="submit" form="form">Continue</button></div>
    <div id="actions" class="buttons" hidden><button id="settings" type="button" class="secondary">Back</button><button id="retry" type="button">Continue</button></div>
   </div>

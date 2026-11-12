@@ -8,7 +8,7 @@ app.setPath("userData",root);app.setName("Metis onboarding test");app.setAppUser
 const {createDesktop}=require("../src/main/web-window.cjs");
 const wait=async predicate=>{for(let i=0;i<200;i++){if(await predicate())return;await new Promise(resolve=>setTimeout(resolve,40));}throw Error("Onboarding wait timed out");};
 let desktop,fixture,foreign,initialRequests=0;
-async function captureSeries(contents,name,count=14){
+async function captureSeries(contents,name,count=28){
  if(process.env.METIS_CAPTURE_ONBOARDING_MOTION!=="1")return;
  const folder=path.join(__dirname,"..","test-results","transition-media");fs.mkdirSync(folder,{recursive:true});
  const frames=[];for(let i=0;i<count;i++){const at=Date.now(),file=name+"-"+String(i).padStart(2,"0")+".png";fs.writeFileSync(path.join(folder,file),(await contents.capturePage()).toPNG());frames.push({file,at});await new Promise(resolve=>setTimeout(resolve,45));}
@@ -28,20 +28,24 @@ async function run(){
  const local=desktop.win.webContents;
  await wait(()=>local.executeJavaScript('Boolean(document.querySelector("#motion svg path"))'));
  await captureSeries(local,"intro");
- await wait(()=>local.executeJavaScript('document.getElementById("motion").dataset.onboardingEntrance==="done"'));
+ await wait(()=>local.executeJavaScript('document.getElementById("motion").dataset.onboardingEntrance==="done"&&document.querySelector("main").dataset.transition==="idle"'));
  assert.equal(await local.executeJavaScript('document.body.dataset.onboardingReady'),"true");
  console.log("NATIVE_LOAD_READY_EDGE_ENTRANCE_COMPLETED_OK");
+ const reducedIntro=await local.executeJavaScript('matchMedia("(prefers-reduced-motion: reduce)").matches');
+ await local.executeJavaScript('document.dispatchEvent(new PointerEvent("pointerdown",{button:0,isPrimary:true,clientX:innerWidth/2,clientY:innerHeight/2,bubbles:true}))');
+ assert.equal(await local.executeJavaScript('document.getElementById("motion").dataset.onboardingPulse'),reducedIntro?"idle":"active");
+ if(!reducedIntro){console.log("NATIVE_CLICK_WAVE_IMPULSE_OK");await captureSeries(local,"pulse",18);}
  assert.ok(require("../package.json").build.files.includes("assets/metis-wordmark.svg"));
  const logoInfo=await local.executeJavaScript('(async()=>{const el=document.querySelector(".metis-wordmark"),image=new Image();image.src=new URL("../assets/metis-wordmark.svg",location.href).href;await image.decode();const r=el.getBoundingClientRect();return {label:el.getAttribute("aria-label"),mask:getComputedStyle(el).maskImage,width:r.width,height:r.height,x:r.x,y:r.y,naturalWidth:image.naturalWidth};})()');
- assert.equal(logoInfo.label,"Metis");assert.ok(logoInfo.mask.includes("metis-wordmark.svg"));assert.equal(logoInfo.width,108);assert.equal(logoInfo.height,32);assert.ok(logoInfo.naturalWidth>0);
+ assert.equal(logoInfo.label,"Metis");assert.ok(logoInfo.mask.includes("metis-wordmark.svg"));assert.equal(logoInfo.width,190);assert.equal(logoInfo.height,64);assert.ok(logoInfo.naturalWidth>0);
  await local.executeJavaScript("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
  let logoPaint=0,logoPixels=0;
  await wait(async()=>{
-  const logoImage=await local.capturePage({x:Math.floor(logoInfo.x),y:Math.floor(logoInfo.y),width:108,height:32}),bytes=logoImage.getBitmap();
+  const logoImage=await local.capturePage({x:Math.floor(logoInfo.x),y:Math.floor(logoInfo.y),width:190,height:64}),bytes=logoImage.getBitmap();
   logoPaint=0;logoPixels=bytes.length/4;for(let i=0;i<bytes.length;i+=4)if(bytes[i]>180)logoPaint++;
-  return logoPaint>80&&logoPaint<2000;
+  return logoPaint>80&&logoPaint<logoPixels*.6;
  });
- assert.ok(logoPaint>80&&logoPaint<2000,`Canonical vector wordmark must paint as glyphs, not a blank or solid rectangle: ${logoPaint}/${logoPixels}`);
+ assert.ok(logoPaint>80&&logoPaint<logoPixels*.6,`Canonical vector wordmark must paint as glyphs, not a blank or solid rectangle: ${logoPaint}/${logoPixels}`);
  const originalSize=desktop.win.getContentSize(),originalMinimum=desktop.win.getMinimumSize();
  // Test-only viewport emulation on macOS: AppKit constrains physical window resizing.
  // Other platforms exercise the actual isolated window. Product constraints stay unchanged.
@@ -51,21 +55,21 @@ async function run(){
   else desktop.win.setContentSize(width,width===390?844:1000);
   await wait(()=>local.executeJavaScript("innerWidth==="+width));await new Promise(resolve=>setTimeout(resolve,100));
   const layout=await local.executeJavaScript('({overflow:document.documentElement.scrollWidth>innerWidth+1,width:document.querySelector(".metis-wordmark").getBoundingClientRect().width})');
-  assert.equal(layout.overflow,false);assert.equal(layout.width,108);
-  assert.equal(await local.executeJavaScript('(()=>{const b=document.getElementById("begin").getBoundingClientRect(),p=document.getElementById("progress").getBoundingClientRect(),f=document.querySelector("footer").getBoundingClientRect();return Math.abs(p.top+p.height/2-b.top-b.height/2)<2&&Math.abs(b.right-f.right)<2&&p.right<b.left})()'),true);console.log("WORDMARK_RESPONSIVE_OK",width);
+  assert.equal(layout.overflow,false);assert.equal(layout.width,190);
+  assert.equal(await local.executeJavaScript('(()=>{const b=document.getElementById("begin").getBoundingClientRect(),p=document.getElementById("progress").getBoundingClientRect(),f=document.querySelector("footer").getBoundingClientRect();return Math.abs(b.x+b.width/2-innerWidth/2)<2&&p.top>b.bottom})()'),true);console.log("WORDMARK_RESPONSIVE_OK",width);
  }
  if(process.platform==="darwin")local.disableDeviceEmulation();
  desktop.win.setMinimumSize(...originalMinimum);desktop.win.setContentSize(...originalSize);await wait(()=>local.executeJavaScript("innerWidth==="+originalSize[0]));await new Promise(resolve=>setTimeout(resolve,100));
  console.log("CANONICAL_WEB_WORDMARK_DECODED_AND_PAINTED_OK",logoPaint);
- assert.equal(await local.executeJavaScript('document.getElementById("heading").textContent'),"Welcome to Metis.");
+ assert.equal(await local.executeJavaScript('document.getElementById("heading").textContent'),"Welcome to Metis");
  assert.equal(await local.executeJavaScript('getComputedStyle(document.documentElement).backgroundColor'),"rgb(0, 0, 0)");
  assert.equal(await local.executeJavaScript('getComputedStyle(document.documentElement).getPropertyValue("--primary").trim()'),"#fff");
  assert.equal(await local.executeJavaScript('document.querySelectorAll(".features,.brand").length'),0);
  console.log("MINIMAL_NATIVE_BLACK_WHITE_AND_ICONS_OK");
- assert.equal(await local.executeJavaScript('document.querySelector("footer").innerText.trim()'),"Continue");
- assert.equal(await local.executeJavaScript('(()=>{const b=document.getElementById("begin").getBoundingClientRect(),p=document.getElementById("progress").getBoundingClientRect(),f=document.querySelector("footer").getBoundingClientRect();return Math.abs((p.top+p.height/2)-(b.top+b.height/2))<2&&Math.abs(b.right-f.right)<2&&p.right<b.left})()'),true);console.log("NATIVE_CONTINUE_AND_DOTS_SAME_FOOTER_ROW_OK");
- assert.deepEqual(await local.executeJavaScript('Array.from(document.querySelectorAll("button")).filter(el=>el.getClientRects().length).map(el=>el.textContent.trim())'),["Continue"]);
- console.log("NATIVE_ONLY_CONTINUE_AND_NO_FOOTER_TEXT_OK");
+ assert.equal(await local.executeJavaScript('document.querySelector("footer").innerText.trim()'),"Start");
+ assert.equal(await local.executeJavaScript('(()=>{const b=document.getElementById("begin").getBoundingClientRect(),p=document.getElementById("progress").getBoundingClientRect(),f=document.querySelector("footer").getBoundingClientRect();return Math.abs(b.x+b.width/2-innerWidth/2)<2&&p.top>b.bottom})()'),true);console.log("NATIVE_WELCOME_START_CENTERED_WITH_PROGRESS_OK");
+ assert.deepEqual(await local.executeJavaScript('Array.from(document.querySelectorAll("button")).filter(el=>el.getClientRects().length).map(el=>el.textContent.trim())'),["Start"]);
+ console.log("NATIVE_ONLY_START_AND_NO_FOOTER_TEXT_OK");
  assert.equal(await local.executeJavaScript('getComputedStyle(document.querySelector("#motion svg")).color'),"rgb(255, 255, 255)");
  assert.equal(await local.executeJavaScript('document.querySelector("#motion svg [data-onboarding-geometry]").getAttribute("stroke")'),"none");
  assert.equal(await local.executeJavaScript('document.querySelectorAll("#motion svg > g > rect").length'),1);

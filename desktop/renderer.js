@@ -59,6 +59,12 @@ function setConnection(data) {
   if (typeof data.hideOverlayFromCapture === "boolean") renderCaptureSetting(data.hideOverlayFromCapture);
   if (data.cancelShortcut) renderCancelShortcut(data.cancelShortcut);
   renderDesktopPermission(state);
+  const access=byId("windows-access"),restart=byId("restart-as-administrator");
+  access.hidden=state.platform!=="win32";
+  byId("windows-access-title").textContent=state.windowsElevation==="administrator"?"Windows process: Administrator":state.windowsElevation==="user"?"Windows process: Standard user":"Windows process: Unverified";
+  byId("windows-access-detail").textContent=state.accessMismatch?"Device access is paused until Windows rights and the pairing mode match. Enter a new matching pairing code; the saved pairing has not been changed.":state.permissionMode==="user"?"This device is paired with User access. Administrator access also requires a new Administrator pairing code.":"Administrator pairing requires Windows UAC approval.";
+  if(state.deviceElevation)byId("windows-access-detail").textContent+=" Remote Client process: "+(state.deviceElevation==="administrator"?"Administrator.":"Standard user.");
+  restart.hidden=state.platform!=="win32"||state.windowsElevation!=="user";
   if (data.error && state.paired) showHubError(data.error);
   if (data.error && !state.paired) {
     byId("pair-error").textContent = data.error;
@@ -364,6 +370,12 @@ byId("pair-form").addEventListener("submit", async (event) => {
     button.disabled = false;
   }
 });
+byId("restart-as-administrator").addEventListener("click",async()=>{
+ const button=byId("restart-as-administrator");button.disabled=true;
+ try{await window.metis.restartAsAdministrator();}
+ catch{showHubError("Administrator restart was not confirmed. Metis is still running; no pairing or settings were changed.");}
+ finally{button.disabled=false;}
+});
 byId("refresh").addEventListener("click", () => void refresh());
 byId("check-permissions")?.addEventListener("click", () => void refreshDesktopPermissions(false));
 byId("grant-permissions")?.addEventListener("click", () => void refreshDesktopPermissions(true));
@@ -416,5 +428,5 @@ function renderDesktopPermission(next) {
   byId("desktop-permission-notice").hidden = Boolean(next.desktopAvailable);
   byId("desktop-permission-reason").textContent = next.desktopReason || "Desktop control is unavailable. File and command access remain available.";
   byId("desktop-access-permissions").hidden = next.platform !== "darwin";
-  byId("pair-note").textContent = next.platform === "win32" ? "The code expires after 15 minutes. For admin access, start this app as administrator and confirm UAC." : "The code expires after 15 minutes. System actions require the permissions of your signed-in account.";
+  byId("pair-note").textContent = next.platform === "win32" ? "The code expires after 15 minutes. For Administrator access, use Restart as administrator and confirm UAC, then enter an Administrator pairing code." : "The code expires after 15 minutes. System actions require the permissions of your signed-in account.";
 }

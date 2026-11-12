@@ -75,8 +75,9 @@ async function click(selector){const r=await js('(()=>{const r=document.querySel
   const b=await js("document.querySelector('.onboarding-tour').getBoundingClientRect().toJSON()");
   console.log('TOUR',width,JSON.stringify({a,b}));check(Math.abs(a.x-b.x)+Math.abs(a.y-b.y)>20,'tour follows actual target '+width);
   await js('fixture.setIndex(5)');await pause(500);
-  await js("Array.from(document.querySelectorAll('.onboarding-tour button')).find(e=>e.textContent==='Continue').click()");await pause(500);
-  check(await js("(()=>{const r=document.querySelector('.onboarding-tour').getBoundingClientRect();return Math.abs(r.x+r.width/2-innerWidth/2)<2&&Math.abs(r.y+r.height/2-innerHeight/2)<2&&parseFloat(getComputedStyle(document.querySelector('.onboarding-tour h2')).fontSize)>=28})()"),'large centered completion '+width);
+  check(await js("Array.from(document.querySelectorAll('.onboarding-tour button')).some(e=>e.textContent==='Finish')&&!document.querySelector('.onboarding-tour').textContent.includes('Thanks for using')"),'last real step offers Finish without thanks '+width);
+  await js("Array.from(document.querySelectorAll('.onboarding-tour button')).find(e=>e.textContent==='Finish').click()");await pause(500);
+  check(await js("document.body.dataset.finished==='true'"),'Finish completes immediately '+width);
  }
  fs.mkdirSync(path.join(__dirname,'../test-results'),{recursive:true});fs.writeFileSync(path.join(__dirname,'../test-results/assistant-passkeys.json'),JSON.stringify({passed:results.length,results},null,2));
  console.log('ASSISTANT_PASSKEYS_NATIVE_OK',results.length);

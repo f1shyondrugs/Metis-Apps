@@ -21,6 +21,12 @@ process.parentPort.on('message', async ({ data }) => {
     } else if (data.type === 'capabilities') capabilities = data.value;
     else if (data.type === 'cancel') runtime?.cancelComputerUse();
     else if (data.type === 'start' && !runtime) {
+      if(!['admin','user'].includes(data.config?.permissionMode))throw Error('Invalid device access mode.');
+      if(process.platform==='win32'){
+        const actual=require('../main/windows-token-identity.cjs').currentTokenIdentity().elevated;
+        process.parentPort.postMessage({type:'event',value:{type:'device_access',elevation:actual?'administrator':'user'}});
+        if(actual!==(data.config?.permissionMode==='admin'))throw Error('Device process Windows rights do not match the pairing mode. Restart Metis with the matching Windows rights.');
+      }
       capabilities = data.capabilities;
       const { startRemoteClient } = await import(pathToFileURL(path.join(__dirname, '../../client.mjs')).href);
       runtime = startRemoteClient({

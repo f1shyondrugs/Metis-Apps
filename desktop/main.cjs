@@ -50,19 +50,19 @@ function psQuote(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
 
-function runPowerShell(script) {
+function runPowerShell(script, timeout = 15000) {
   return new Promise((resolve, reject) => {
     // Windows process creation can itself take hundreds of milliseconds. Keep
     // both CreateProcess and command completion outside Electron's UI thread.
     const worker = new Worker(`
       const { parentPort, workerData } = require("node:worker_threads");
       const { execFile } = require("node:child_process");
-      execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", workerData],
-        { encoding: "utf8", windowsHide: true, timeout: 15000, maxBuffer: 1024 * 1024 },
+      execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", workerData.script],
+        { encoding: "utf8", windowsHide: true, timeout: workerData.timeout, maxBuffer: 1024 * 1024 },
         (error, stdout, stderr) => parentPort.postMessage(error
           ? { ok: false, error: stderr?.trim() || error.message || "Windows task setting failed" }
           : { ok: true, stdout: stdout.trim() }));
-    `, { eval: true, workerData: Buffer.from(script, "utf16le").toString("base64") });
+    `, { eval: true, workerData: {script:Buffer.from(script, "utf16le").toString("base64"),timeout} });
     let settled = false;
     worker.once("message", result => {
       settled = true;
@@ -75,10 +75,23 @@ function runPowerShell(script) {
   });
 }
 
-async function isElevated() {
-  if (process.platform !== "win32") return false;
-  return await runPowerShell("$identity = [Security.Principal.WindowsIdentity]::GetCurrent(); $principal = [Security.Principal.WindowsPrincipal]::new($identity); $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)") === "True";
+let windowsElevation;
+function getWindowsElevation() {
+ if(process.platform!=="win32")return null;
+ if(windowsElevation)return windowsElevation;
+ try{windowsElevation=require("./src/main/windows-token-identity.cjs").currentTokenIdentity().elevated?"administrator":"user";}catch{return "unknown";}
+ return windowsElevation;
 }
+async function isElevated() {
+ const value=getWindowsElevation();
+ if(value==="unknown")throw Error("Windows administrator status could not be verified.");
+ return value==="administrator";
+}
+const restartAsAdministrator=require("./src/main/admin-restart.cjs").createAdminRestart({
+ platform:process.platform,readElevation:getWindowsElevation,developmentEntry:app.isPackaged?undefined:path.join(__dirname,"bootstrap.cjs"),
+ launch:async args=>Number(await runPowerShell(`$child = Start-Process -FilePath ${psQuote(process.execPath)} -ArgumentList ${psQuote(args.map(arg=>'"'+arg+'"').join(" "))} -Verb RunAs -PassThru; $child.Id`,120000)),
+ quit:()=>app.quit()
+});
 
 function getAutostart() {
   if (process.platform !== "win32") {
@@ -191,7 +204,8 @@ function setOverlayCaptureHidden(value) {
 
 function publicState() {
   return {
-    paired: Boolean(config),
+    paired: Boolean(config) && !status.accessMismatch,
+    windowsElevation: getWindowsElevation(),
     server: config?.server || "",
     clientId: config?.clientId || "",
     version: app.getVersion(),
@@ -363,6 +377,7 @@ function stopComputerUseCursor() {
 }
 
 async function startRuntime() {
+  status.deviceElevation=null;
   annotationOverlay?.clearAll();
   computerUseOverlay?.hide();
   runtime?.stop();
@@ -370,7 +385,7 @@ async function startRuntime() {
   currentAppearance = appearance.fallback;
   computerUseOverlay?.setAppearance(currentAppearance);
   broadcast();
-  if (!config) return;
+  if (!config || status.accessMismatch) return;
   const { startDeviceHost } = require("./src/device/runtime.cjs");
   const { showNativeNotification } = require("./notification-native.cjs");
   runtime = startDeviceHost({
@@ -380,6 +395,7 @@ async function startRuntime() {
     capabilities: { desktopAvailable: status.desktopAvailable, overlayAnnotations: Boolean(annotationOverlay && status.desktopAvailable), nativeNotifications: screen.getAllDisplays().length > 0 && Notification.isSupported() },
     showNotification: notification => showNativeNotification({ Notification, openChat: openDesktopChat, server: config.server, notification }),
     onEvent(event) {
+      if(event.type==="device_access"){status.deviceElevation=event.elevation;broadcast();return;}
       if (event.type === "desktop_overlay") {
         if (!annotationOverlay) throw new Error("Desktop annotations are not available");
         return annotationOverlay.execute(event.params);
@@ -444,6 +460,7 @@ function registerIpc() {
     return handler(event, ...args);
   });
   handle("hub:state", () => publicState());
+  handle("hub:restart-as-administrator", () => restartAsAdministrator());
   handle("hub:snapshot", () => fetchSnapshot());
   handle("hub:pair", async (_event, input) => {
     const server = normalizeServer(input?.server).replace(/\/+$/, "");
@@ -457,8 +474,8 @@ function registerIpc() {
     const permissionMode = token.startsWith("a_") ? "admin" : "user";
     if (process.platform === "win32") {
       const elevated = await isElevated();
-      if (permissionMode === "admin" && !elevated) throw new Error("Admin access was selected in Metis. Start this app as administrator and confirm UAC, then enter the same code.");
-      if (permissionMode === "user" && elevated) throw new Error("User access was selected in Metis. Start this app normally, without administrator rights, then enter the same code.");
+      if (permissionMode === "admin" && !elevated) throw new Error("Administrator access was selected in Metis. Use Restart as administrator here, confirm UAC, then re-enter the same Administrator code.");
+      if (permissionMode === "user" && elevated) throw new Error("User access was selected in Metis. Quit Metis from the tray, then start normally without administrator rights and enter the same code.");
     }
     const response = await fetch(`${parsed.origin}/api/remote-clients/enroll`, {
       method: "POST",
@@ -488,6 +505,7 @@ function registerIpc() {
     const next = { server: parsed.origin, clientId: data.client.id, credential: data.credential, permissionMode: data.client.permissionMode };
     saveConfig(next);
     config = next;
+    status.accessMismatch = false;
     status.connection = "connecting";
     status.error = "";
     await startRuntime();
@@ -499,6 +517,8 @@ function registerIpc() {
     runtime?.stop();
     runtime = null;
     config = null;
+    status.accessMismatch=false;
+    status.deviceElevation=null;
     currentAppearance = appearance.fallback;
     computerUseOverlay?.setAppearance(currentAppearance);
     assistant?.setAppearance(currentAppearance);
@@ -591,7 +611,7 @@ function setupUpdates() {
   setInterval(check, 6 * 60 * 60 * 1000);
 }
 
-if (!app.requestSingleInstanceLock()) {
+if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
   const { forwardSecondInstance } = require("./src/main/reopen.cjs");
   void forwardSecondInstance({
     platform: process.platform,
@@ -602,7 +622,13 @@ if (!app.requestSingleInstanceLock()) {
     quit: () => app.quit(),
   });
 } else {
-  app.on("second-instance", () => void showDesktop());
+  app.on("second-instance", (_event,_argv,_cwd,hint) => {
+    // This untrusted hint changes presentation only, never permissions or UAC.
+    if(getWindowsElevation()==="user"&&hint?.windowsElevation==="administrator"){
+      status.error="Metis is already running without administrator rights. Use Restart as administrator here; an elevated second launch cannot upgrade an existing process.";
+      void desktopReady.then(()=>{showWindow();broadcast();});
+    }else void showDesktop();
+  });
   app.on("activate", () => void showDesktop());
   let markDesktopReady;
   const desktopReady = new Promise(resolve => { markDesktopReady = resolve; });
@@ -615,20 +641,13 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     app.setAppUserModelId(process.env.METIS_DESKTOP_TEST_DATA ? "ai.metis.remoteclient.test" : "ai.metis.remoteclient");
     try { config = loadConfig(); } catch (error) { status.error = error.message; }
-    if (process.platform === "win32" && config?.permissionMode === "admin" && !(await isElevated())) {
-      try {
-        app.releaseSingleInstanceLock();
-        await runPowerShell(`Start-Process -FilePath ${psQuote(process.execPath)} -Verb RunAs`);
-      } catch (error) {
-        dialog.showErrorBox(APP_NAME, error.message || "Administrator access was not confirmed.");
-      }
-      app.quit();
-      return;
-    }
-    if (process.platform === "win32" && config?.permissionMode === "user" && await isElevated()) {
-      dialog.showErrorBox(APP_NAME, "This device was paired with user access. Start the app normally, without administrator rights.");
-      app.quit();
-      return;
+    const actualElevation=getWindowsElevation();
+    status.accessMismatch=process.platform==="win32"&&Boolean(config)&&(actualElevation==="unknown"||((config.permissionMode==="admin")!==(actualElevation==="administrator")));
+    if(process.platform==="win32"&&config?.permissionMode==="admin"&&actualElevation==="user"){
+      try{await restartAsAdministrator();return;}
+      catch{status.error="Administrator access was not confirmed. Your saved pairing is unchanged. Use Restart as administrator to try again.";}
+    }else if(status.accessMismatch){
+      status.error=actualElevation==="unknown"?"Windows administrator status could not be verified. Device access is paused.": "This process is elevated, but the saved pairing grants User access. Enter a new Administrator pairing code, or quit and start normally. Your existing pairing is unchanged.";
     }
     if (process.platform === "win32" && app.getLoginItemSettings().openAtLogin) {
       app.setLoginItemSettings({ openAtLogin: false, path: process.execPath });
@@ -661,7 +680,7 @@ if (!app.requestSingleInstanceLock()) {
     const { createAssistant } = require("./src/main/assistant.cjs");
     assistant = createAssistant({
       getServer: () => desktop?.getState().server || config?.server || require("./policy.cjs").DEFAULT_SERVER,
-      getDevice: () => ({ clientId:config?.clientId || "", hostname:os.hostname(), platform:process.platform, version:app.getVersion() }),
+      getDevice: () => ({ clientId:status.accessMismatch?"":config?.clientId || "", hostname:os.hostname(), platform:process.platform, version:app.getVersion() }),
       annotationOverlay, onEscape: () => annotationOverlay?.clearAll(),
       computerOverlay:computerUseOverlay, appearance:currentAppearance, hideFromCapture:overlayPreferences.get(),
       getShortcuts: () => overlayPreferences.getAssistantShortcuts(), onDevices: showWindow,

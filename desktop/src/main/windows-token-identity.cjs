@@ -15,4 +15,10 @@ function tokenIdentity(koffi,info,token) {
   return {sid:data.subarray(offset,offset+size).toString('hex'),session:session.readUInt32LE(),elevated:Boolean(elevation.readUInt32LE())};
  }finally{koffi.free(memory);}
 }
-module.exports={tokenIdentity};
+function currentTokenIdentity() {
+ const koffi=require('koffi'),kernel=koffi.load('kernel32.dll'),adv=koffi.load('advapi32.dll');
+ const token=Buffer.alloc(8),open=adv.func('bool OpenProcessToken(uintptr_t,uint32_t,void *)'),info=adv.func('bool GetTokenInformation(uintptr_t,uint32_t,void *,uint32_t,void *)'),close=kernel.func('bool CloseHandle(uintptr_t)');
+ if(!open(kernel.func('uintptr_t GetCurrentProcess()')(),8,token))throw Error('Could not inspect Windows token.');
+ try{return tokenIdentity(koffi,info,Number(token.readBigUInt64LE()));}finally{close(Number(token.readBigUInt64LE()));}
+}
+module.exports={tokenIdentity,currentTokenIdentity};

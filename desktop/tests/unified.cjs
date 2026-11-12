@@ -72,6 +72,7 @@ async function main() {
   assert.equal(api.publicState().clientId, 'fixture-device');
   assert.deepEqual(fs.readFileSync(configFile), original);
   assert.ok(api.getRuntimePid() > 0 && api.getRuntimePid() !== process.pid);
+  if(process.platform==='win32'){assert.equal(api.publicState().deviceElevation,permissionMode==='admin'?'administrator':'user');console.log('ACTUAL_DEVICE_PROCESS_TOKEN_MATCHES_PAIRING_OK');}
   console.log('SEPARATE_DEVICE_PROCESS_OK');
   console.log('PAIRING_IDENTITY_PRESERVED_OK');
   const desktop = api.getDesktop();
@@ -80,6 +81,10 @@ async function main() {
     ['undefined', 'undefined', 'undefined', 'undefined']);
   await remote.executeJavaScript('metisApp.openDeviceSettings()');
   const hub = api.getDeviceWindow();
+  const outsider=new BrowserWindow({show:false,webPreferences:{preload:path.join(__dirname,'../preload.cjs'),sandbox:true,contextIsolation:true}});
+  await outsider.loadURL(server+'/foreign');
+  await assert.rejects(outsider.webContents.executeJavaScript('metis.restartAsAdministrator()'),/Access denied/);
+  outsider.destroy();console.log('ADMIN_RESTART_FOREIGN_FRAME_REJECTED_OK');
   assert.equal(hub.isVisible(), true);
   console.log('WEB_SETTINGS_OPENS_LOCAL_DEVICE_HUB_OK');
   await waitFor(() => !hub.webContents.isLoading());
