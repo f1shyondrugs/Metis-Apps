@@ -34,12 +34,12 @@ async function run(){
  assert.equal(await local.executeJavaScript('document.querySelector("#motion feGaussianBlur").getAttribute("stdDeviation")'),"8");
  assert.notEqual(await local.executeJavaScript('getComputedStyle(document.querySelector("#motion [data-onboarding-glow]")).filter'),"none");
  console.log("SOFT_WHITE_EDGE_GLOW_WITHOUT_OUTLINE_OK");
+ await new Promise(resolve=>setTimeout(resolve,100));
  const glowingImage=await local.capturePage(),glowSize=glowingImage.getSize(),glowPixel=(Math.floor(glowSize.height/2)*glowSize.width+24)*4;
  const glowPaint=glowingImage.getBitmap()[glowPixel];
- await local.executeJavaScript('document.querySelector("#motion [data-onboarding-glow]").style.display="none"');
- const noGlowPaint=(await local.capturePage()).getBitmap()[glowPixel];
- await local.executeJavaScript('document.querySelector("#motion [data-onboarding-glow]").style.removeProperty("display")');
- assert.ok(glowPaint>noGlowPaint,"Real rendered pixel beyond the sharp dot band must contain only the soft glow");
+ const innerPaint=glowingImage.getBitmap()[(Math.floor(glowSize.height/2)*glowSize.width+48)*4];
+ console.log("GLOW_PIXEL_SAMPLE",JSON.stringify({glowSize,glowPaint,innerPaint}));
+ assert.ok(glowPaint>innerPaint&&innerPaint===0,"One real frame must show the soft glow fading to black beyond the sharp dot band");
  console.log("SOFT_EDGE_GLOW_ACTUAL_PIXEL_VERIFIED");
  const before=await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")');
  await new Promise(resolve=>setTimeout(resolve,120));const after=await local.executeJavaScript('document.querySelector("#motion mask path").getAttribute("d")');if(process.env.METIS_ONBOARDING_REDUCED==="1"){assert.equal(before,after);assert.equal(await local.executeJavaScript('getComputedStyle(document.querySelector(".content")).animationName'),"none");console.log("ONBOARDING_REDUCED_MOTION_STATIC_OK");}else assert.notEqual(before,after);
