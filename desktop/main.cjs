@@ -677,7 +677,9 @@ if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
     isElevated,
     requestActivation: () => require("./src/main/window-activation.cjs").requestWindowActivation(userDataDir),
     reportError: () => dialog.showErrorBox(APP_NAME, "Metis is still running, but the window could not be reopened. Use Open Metis from the tray."),
-    quit: () => app.quit(),
+    // This process owns no windows or device connection. Exit it directly;
+    // packaged updater/GPU shutdown hooks must not keep a second launcher alive.
+    quit: () => {traceStartup("secondary-signal-and-exit");app.exit(0);},
   });
 } else {
   traceStartup("primary-lock");

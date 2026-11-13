@@ -62,7 +62,10 @@ if($reopenedHandle -eq 0 -or $process.HasExited){throw 'Launching the installed 
 # Source integration separately asserts the SAME BrowserWindow/WebContents and
 # authenticated connection; here enforce one visible workspace and the same PID.
 if([MetisOwnWindows]::Count([int]$process.Id) -ne 1){throw 'Reopening created more than one visible workspace.'}
-if(!$second.WaitForExit(15000)){throw 'Second launcher did not exit.'}
+if(!$second.WaitForExit(15000)){
+ Get-Content (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log') -Tail 50 -ErrorAction SilentlyContinue | Write-Output
+ throw 'Second launcher did not exit.'
+}
 if($second.ExitCode -ne 0){throw 'Second launcher failed.'}
 if($process.Id -ne $originalPid){throw 'Reopening replaced the background process.'}
 Write-Output 'WINDOWS_INSTALLED_CLOSE_AND_SECOND_LAUNCH_REOPEN_OK'
