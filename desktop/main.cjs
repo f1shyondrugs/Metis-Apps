@@ -654,6 +654,16 @@ if(process.platform==="win32"){
   const value=await runPowerShell("$identity = [Security.Principal.WindowsIdentity]::GetCurrent(); $principal = [Security.Principal.WindowsPrincipal]::new($identity); $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)");
   windowsElevation=value==="True"?"administrator":value==="False"?"user":"unknown";
  }catch{windowsElevation="unknown";}
+ if(windowsElevation==="administrator"){
+  // Profile/name must already be configured before appReady, but no elevated
+  // web window, renderer, tray, pairing read or instance lock is ever created.
+  await new Promise((resolve,reject)=>{
+   const worker=new Worker(path.join(__dirname,"src/main/normal-user-process.cjs"),{workerData:{development:!app.isPackaged,role:"desktop"}});
+   worker.once("message",result=>result.ok?resolve(result.pid):reject(Error(result.error||"Start Metis normally from the Start menu.")));
+   worker.once("error",reject);
+  });
+  app.exit(0);return;
+ }
 }
 if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
   const { forwardSecondInstance } = require("./src/main/reopen.cjs");

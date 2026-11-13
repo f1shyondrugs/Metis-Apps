@@ -24,7 +24,9 @@ Write-Output 'WINDOWS_INSTALL_REGISTRATION_OK'
 & node (Join-Path $PSScriptRoot 'verify-split-asar.cjs') (Join-Path $installDir 'resources\\app.asar')
 if ($LASTEXITCODE -ne 0) { throw 'Installed background host source verification failed.' }
 $env:METIS_DESKTOP_TEST_DATA = Join-Path $env:RUNNER_TEMP 'metis-installer-data'
-$process = Start-Process -FilePath $exe -PassThru
+$stdout = Join-Path $env:RUNNER_TEMP 'metis-installed-startup.stdout.log'
+$stderr = Join-Path $env:RUNNER_TEMP 'metis-installed-startup.stderr.log'
+$process = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
 $deadline = (Get-Date).AddSeconds(30)
 do {
   Start-Sleep -Milliseconds 500
@@ -32,7 +34,10 @@ do {
   if ($process.HasExited) { throw 'Installed app exited before opening a window.' }
 } until (($process.MainWindowHandle -ne 0 -and $process.MainWindowTitle -eq 'Metis') -or (Get-Date) -gt $deadline)
 if ($process.MainWindowHandle -eq 0) { throw 'Installed app window did not appear.' }
-if ($process.MainWindowTitle -ne 'Metis') { throw ("Installed app window title mismatch: '" + $process.MainWindowTitle + "'.") }
+if ($process.MainWindowTitle -ne 'Metis') {
+  Get-Content $stderr -Tail 50 -ErrorAction SilentlyContinue | Write-Output
+  throw ("Installed app window title mismatch: '" + $process.MainWindowTitle + "'.")
+}
 Write-Output 'WINDOWS_INSTALLED_APP_LAUNCH_OK'
 if (-not $process.CloseMainWindow()) { throw 'Could not close the test app window.' }
 Start-Sleep -Milliseconds 500

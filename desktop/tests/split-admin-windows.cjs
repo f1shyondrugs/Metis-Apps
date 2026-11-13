@@ -6,6 +6,7 @@ const {spawn}=require('node:child_process'),{WebSocketServer}=require('ws');
 const {launchStandard}=require('./windows-standard-token.cjs');
 const root=fs.mkdtempSync(path.join(os.tmpdir(),'metis-split-ci-')),electron=require('electron');
 const high=[];
+function writeJson(file,value){const temporary=file+'.tmp';fs.writeFileSync(temporary,JSON.stringify(value));fs.renameSync(temporary,file);}
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function main(){
  const fixture=http.createServer((_req,res)=>res.end('{}'));
@@ -35,7 +36,7 @@ async function main(){
     assert.match(input.args[1],new RegExp('^--metis-device-host=[a-f0-9]{32}:'+child.pid+'$'));
     launchCount++;
     const host=spawn(electron,input.args,{env:{...process.env,METIS_DESKTOP_TEST_DATA:root},stdio:'inherit'});high.push(host);
-    fs.writeFileSync(path.join(root,'launched-'+launchCount+'.json'),JSON.stringify({pid:host.pid}));
+    writeJson(path.join(root,'launched-'+launchCount+'.json'),{pid:host.pid});
    }
    if(!commandSent&&fs.existsSync(path.join(root,'client-online.json'))){
     commandSent=true;for(const socket of wss.clients)socket.send(JSON.stringify({type:'request',requestId:'info',action:'get_info',params:{}}));

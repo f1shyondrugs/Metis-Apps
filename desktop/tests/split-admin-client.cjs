@@ -4,6 +4,7 @@ const root=process.env.METIS_SPLIT_TEST_ROOT;
 if(!root)throw Error('Isolated split test root required.');
 app.disableHardwareAcceleration();app.setPath('userData',path.join(root,'medium-ui'));app.setAppUserModelId('ai.metis.split.test');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+function writeJson(file,value){const temporary=file+'.tmp';fs.writeFileSync(temporary,JSON.stringify(value));fs.renameSync(temporary,file);}
 async function until(fn){const end=Date.now()+30000;while(!await fn()){if(Date.now()>end)throw Error('Split test timed out.');await sleep(25);}}
 let controller,win,tray,sequence=0;
 const timeout=setTimeout(()=>app.exit(1),90000);
@@ -15,7 +16,7 @@ async function main(){
   createChannel:options=>require('../src/device/windows-channel.cjs').createChannel(options),
   launch:async args=>{
    const id=++sequence,request=path.join(root,'launch-'+id+'.json'),receipt=path.join(root,'launched-'+id+'.json');
-   fs.writeFileSync(request,JSON.stringify({args,parentPid:process.pid}));
+   writeJson(request,{args,parentPid:process.pid});
    await until(()=>fs.existsSync(receipt));const result=JSON.parse(fs.readFileSync(receipt));if(result.error)throw Error(result.error);return result.pid;
   }});
  // Real synthetic UAC approval relay from the already-High test supervisor.
@@ -35,14 +36,14 @@ async function main(){
  await until(()=>online&&actual==='administrator');
  assert.equal(require('../src/main/windows-token-identity.cjs').currentTokenIdentity().elevated,false);
  assert.equal(await controller.ensure(),pid);assert.equal(sequence,1);
- fs.writeFileSync(path.join(root,'client-online.json'),JSON.stringify({pid,mediumPid:process.pid}));
+ writeJson(path.join(root,'client-online.json'),{pid,mediumPid:process.pid});
  // Hide/reopen presentation without touching the elevated host/connection.
  win.show();win.hide();await sleep(150);win.show();assert.equal(runtime.pid,pid);
  await until(()=>annotations===1&&fs.existsSync(path.join(root,'server-command-ok')));
  runtime.cancelComputerUse();
  runtime.stop();controller.shutdown();
  await until(()=>!controller.connected);
- fs.writeFileSync(path.join(root,'client-result.json'),JSON.stringify({medium:true,deviceHigh:true,oneLaunch:true,overlayRpc:true,hiddenSurvives:true,sharedTray:true}));
+ writeJson(path.join(root,'client-result.json'),{medium:true,deviceHigh:true,oneLaunch:true,overlayRpc:true,hiddenSurvives:true,sharedTray:true});
  tray.destroy();win.destroy();clearTimeout(timeout);app.exit(0);
 }
 main().catch(error=>{console.error(error);fs.writeFileSync(path.join(root,'client-error.txt'),error.stack);controller?.shutdown();clearTimeout(timeout);app.exit(1);});

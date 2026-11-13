@@ -43,6 +43,14 @@ test('private frames are bounded and survive fragmented Unicode or coalesced rea
  const bad=Buffer.alloc(4);bad.writeUInt32LE(MAX_FRAME+1);assert.throws(()=>decoder(()=>{})(bad));
  assert.throws(()=>decoder(()=>{})(Buffer.from([1,0,0,0,91])));
 });
+test('normal Windows entry configures its application profile synchronously, before readiness',()=>{
+ const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),calls=[];
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../bootstrap.cjs'),'utf8'),{
+  process:{platform:'win32',argv:['metis.exe']},
+  require:name=>{calls.push(name);if(name!=='./main.cjs')throw Error('Readiness must not precede main profile setup.');return {};}
+ });
+ assert.deepEqual(calls,['./main.cjs']);
+});
 test('role arguments cannot carry commands, URLs, paths or a second role',()=>{
  assert.deepEqual(roleArgument(['--metis-device-host='+'a'.repeat(32)+':500']),{nonce:'a'.repeat(32),parentPid:500});
  for(const arg of ['x','a'.repeat(32)+':0','a'.repeat(32)+':123;whoami','a'.repeat(32)+':4294967296'])
