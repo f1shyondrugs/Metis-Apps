@@ -15,17 +15,24 @@ public static class MetisOwnWindows {
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr window,out Rect rect);
   [DllImport("user32.dll")] static extern bool PostMessage(IntPtr window,uint message,IntPtr w,IntPtr l);
   [StructLayout(LayoutKind.Sequential)] struct Rect { public int Left,Top,Right,Bottom; }
+  static bool IsWorkspace(IntPtr window,int process) {
+    uint owner;GetWindowThreadProcessId(window,out owner);
+    if(owner!=(uint)process||!IsWindowVisible(window))return false;
+    var title=new StringBuilder(512);var type=new StringBuilder(256);Rect rect;
+    GetWindowText(window,title,512);GetClassName(window,type,256);GetWindowRect(window,out rect);
+    return title.ToString()=="Metis"&&type.ToString().StartsWith("Chrome_WidgetWin")&&rect.Right-rect.Left>=390&&rect.Bottom-rect.Top>=400;
+  }
   public static long Find(int process) {
     long found=0;
     EnumWindows(delegate(IntPtr window,IntPtr value){
-      uint owner;GetWindowThreadProcessId(window,out owner);
-      if(owner!=(uint)process||!IsWindowVisible(window))return true;
-      var title=new StringBuilder(512);var type=new StringBuilder(256);Rect rect;
-      GetWindowText(window,title,512);GetClassName(window,type,256);GetWindowRect(window,out rect);
-      if(title.ToString()=="Metis"&&type.ToString().StartsWith("Chrome_WidgetWin")&&rect.Right-rect.Left>=390&&rect.Bottom-rect.Top>=400){found=window.ToInt64();return false;}
-      return true;
+      if(IsWorkspace(window,process)){found=window.ToInt64();return false;}return true;
     },IntPtr.Zero);
     return found;
+  }
+  public static int Count(int process) {
+    int count=0;
+    EnumWindows(delegate(IntPtr window,IntPtr value){if(IsWorkspace(window,process))count++;return true;},IntPtr.Zero);
+    return count;
   }
   public static string Describe(int process) {
     var lines=new List<string>();
