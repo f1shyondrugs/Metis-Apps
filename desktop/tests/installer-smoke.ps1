@@ -29,7 +29,7 @@ $stdout = Join-Path $env:RUNNER_TEMP 'metis-installed-startup.stdout.log'
 $stderr = Join-Path $env:RUNNER_TEMP 'metis-installed-startup.stderr.log'
 # Hosted Windows has no usable accelerated GPU for a restricted test token.
 # Match the Electron test suites' CPU rendering; keep all renderer sandboxes.
-$renderArguments = '--disable-gpu --disable-software-rasterizer'
+$renderArguments = '--disable-gpu --disable-software-rasterizer --in-process-gpu'
 $process = Start-Process -FilePath $exe -ArgumentList $renderArguments -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
 $deadline = (Get-Date).AddSeconds(30)
 do {
