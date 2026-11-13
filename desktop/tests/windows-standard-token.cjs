@@ -12,7 +12,7 @@ function launchStandard(executable,args,{env=process.env,cwd=process.cwd()}={}){
  const free=kernel.func('uintptr_t LocalFree(uintptr_t)');
  const sidString=adv.func('bool ConvertSidToStringSidW(void *,void *)');
  const security=adv.func('bool ConvertStringSecurityDescriptorToSecurityDescriptorW(void *,uint32_t,void *,void *)');
- const setObject=adv.func('bool SetKernelObjectSecurity(uintptr_t,uint32_t,void *)');
+ const setObject=adv.func('uint32_t SetSecurityInfo(uintptr_t,uint32_t,uint32_t,void *,void *,void *,void *)');
  const getDacl=adv.func('bool GetSecurityDescriptorDacl(void *,void *,void *,void *)');
  try{
   if(!open(kernel.func('uintptr_t GetCurrentProcess()')(),0xF01FF,original))throw Error('Test token open '+last());
@@ -31,9 +31,11 @@ function launchStandard(executable,args,{env=process.env,cwd=process.cwd()}={}){
   // A High-created restricted token otherwise retains a High-owned token DACL.
   // Chromium's still-enabled child sandbox must be able to duplicate the
   // process's OWN limited token, exactly as on a real filtered user account.
-  if(!setObject(ptr(restricted),4,ptr(descriptor)))throw Error('Test token object access '+last());
   const acl=Buffer.alloc(8),present=Buffer.alloc(4),defaulted=Buffer.alloc(4);
-  if(!getDacl(ptr(descriptor),present,acl,defaulted)||!present.readUInt32LE()||!set(ptr(restricted),6,acl,8))throw Error('Test default token access '+last());
+  if(!getDacl(ptr(descriptor),present,acl,defaulted)||!present.readUInt32LE())throw Error('Test token ACL extraction '+last());
+  const accessError=setObject(ptr(restricted),6,4,null,null,ptr(acl),null);
+  if(accessError!==0)throw Error('Test token object access '+accessError);
+  if(!set(ptr(restricted),6,acl,8))throw Error('Test default token access '+last());
   if(!convert(wide('S-1-16-8192'),sid))throw Error('Test integrity SID '+last());
   const label=Buffer.alloc(28);label.writeBigUInt64LE(BigInt(ptr(sid)));label.writeUInt32LE(0x20,8);
   if(!set(ptr(restricted),25,label,28))throw Error('Test medium integrity '+last());
