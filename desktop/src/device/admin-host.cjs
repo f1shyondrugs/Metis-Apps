@@ -17,6 +17,7 @@ function bootstrap() {
       server:false,nonce,peerPid:parentPid,onClose:stop,
       async onMessage(message){
         if(message.type==='quit'){stop();return;}
+        if(['capabilities','cancel','stop'].includes(message.type)&&message.session!==activeSession)return;
         if(message.type==='start'){
           const config=message.config,session=message.session;
           if(!/^[a-f0-9]{32}$/.test(session||''))throw Error('Invalid device session.');
