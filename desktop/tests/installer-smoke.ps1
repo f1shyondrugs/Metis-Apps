@@ -30,9 +30,12 @@ $stderr = Join-Path $env:RUNNER_TEMP 'metis-installed-startup.stderr.log'
 # Hosted Windows has no usable accelerated GPU for a restricted test token.
 # Match the Electron test suites' CPU rendering; keep all renderer sandboxes.
 $renderArguments = '--disable-gpu --disable-software-rasterizer --in-process-gpu'
-$launched = & node (Join-Path $PSScriptRoot 'spawn-installed.cjs') $exe $stdout $stderr $renderArguments
+$receipt = Join-Path $env:RUNNER_TEMP 'metis-first-launch.json'
+& node (Join-Path $PSScriptRoot 'spawn-installed.cjs') $exe $stdout $stderr $receipt $renderArguments
 if ($LASTEXITCODE -ne 0) { throw 'Standard installed-app launch failed.' }
-$launch = $launched | ConvertFrom-Json
+$deadline = (Get-Date).AddSeconds(15)
+while (!(Test-Path $receipt) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 50 }
+$launch = Get-Content $receipt -Raw | ConvertFrom-Json
 if (-not $launch.mediumParent) { throw 'Installed-app launcher is not a standard process.' }
 $process = Get-Process -Id $launch.pid
 $deadline = (Get-Date).AddSeconds(30)
@@ -54,9 +57,12 @@ Start-Sleep -Milliseconds 500
 $process.Refresh()
 if ($process.HasExited) { throw 'Closing the main window stopped background operation.' }
 $originalPid=$process.Id
-$launched = & node (Join-Path $PSScriptRoot 'spawn-installed.cjs') $exe (Join-Path $env:RUNNER_TEMP 'metis-second.stdout.log') (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log') $renderArguments
+$receipt = Join-Path $env:RUNNER_TEMP 'metis-second-launch.json'
+& node (Join-Path $PSScriptRoot 'spawn-installed.cjs') $exe (Join-Path $env:RUNNER_TEMP 'metis-second.stdout.log') (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log') $receipt $renderArguments
 if ($LASTEXITCODE -ne 0) { throw 'Standard second launch failed.' }
-$second = Get-Process -Id (($launched | ConvertFrom-Json).pid)
+$deadline = (Get-Date).AddSeconds(15)
+while (!(Test-Path $receipt) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 50 }
+$second = Get-Process -Id ((Get-Content $receipt -Raw | ConvertFrom-Json).pid)
 $deadline=(Get-Date).AddSeconds(20)
 do{
  Start-Sleep -Milliseconds 250
