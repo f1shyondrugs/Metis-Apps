@@ -26,13 +26,23 @@ test('runtime replies and cancellation use only the verified host; stopping neve
  const events=[];const runtime=attachAdminRuntime(f.control,{config:{permissionMode:'admin'},capabilities:{},
  onEvent:async value=>{events.push(value);return {ok:true};},showNotification:async()=>true});
  assert.equal(runtime.pid,600);assert.equal(f.sends[0].type,'start');
- await f.options.onMessage({type:'event',id:1,value:{type:'desktop_overlay'}});
- assert.equal(events.length,1);assert.deepEqual(f.sends[1],{type:'reply',id:1,value:{ok:true}});
+ const session=f.sends[0].session;assert.match(session,/^[a-f0-9]{32}$/);
+ await f.options.onMessage({type:'event',id:1,session,value:{type:'desktop_overlay'}});
+ assert.equal(events.length,1);assert.deepEqual(f.sends[1],{type:'reply',id:1,session,value:{ok:true}});
  runtime.cancelComputerUse();runtime.stop();runtime.stop();
- assert.deepEqual(f.sends.slice(2),[{type:'cancel'},{type:'stop'}]);
+ assert.deepEqual(f.sends.slice(2),[{type:'cancel',session},{type:'stop',session}]);
  runtime.setCapabilities({});assert.equal(f.sends.length,4);
  f.control.shutdown();assert.equal(f.sends[4].type,'quit');
  await assert.rejects(f.control.ensure(),/quitting/);
+});
+test('late notifications and events from an older pairing cannot use a newer server session',async()=>{
+ const f=fixture();await f.control.ensure();
+ const options={config:{permissionMode:'admin'},capabilities:{},onEvent:async()=>assert.fail('stale event'),showNotification:async()=>assert.fail('stale notification'),receiveNotification:async()=>assert.fail('stale server notification')};
+ attachAdminRuntime(f.control,options);const old=f.sends[0].session;
+ attachAdminRuntime(f.control,options);assert.notEqual(f.sends[1].session,old);
+ for(const type of ['event','notification','notification-message'])await f.options.onMessage({type,id:55,session:old,value:{notification:{id:'old'}}});
+ assert.equal(f.sends.slice(2).filter(message=>message.error==='Device session changed.').length,3);
+ f.control.shutdown();
 });
 test('private frames are bounded and survive fragmented Unicode or coalesced reads',()=>{
  const output=[],receive=decoder(value=>output.push(value));

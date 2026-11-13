@@ -41,19 +41,24 @@ function createAdminController({launch,createChannel,developmentEntry,parentPid=
 }
 function attachAdminRuntime(controller,{config,capabilities,onEvent,showNotification,receiveNotification}){
   let stopped=false;
+  const session=crypto.randomBytes(16).toString('hex');
   controller.setHandler(async message=>{
     if(stopped||!['event','notification','notification-message'].includes(message.type))return;
+    if(message.session!==session){
+      if(message.id)controller.send({type:'reply',id:message.id,session:message.session,error:'Device session changed.'});
+      return;
+    }
     try{
       const value=await (message.type==='event'?onEvent(message.value):message.type==='notification-message'?receiveNotification(message.value):showNotification(message.value));
-      if(message.id&&!stopped)controller.send({type:'reply',id:message.id,value});
-    }catch(error){if(message.id&&!stopped)controller.send({type:'reply',id:message.id,error:error.message});}
+      if(message.id&&!stopped)controller.send({type:'reply',id:message.id,session,value});
+    }catch(error){if(message.id&&!stopped)controller.send({type:'reply',id:message.id,session,error:error.message});}
   });
-  controller.send({type:'start',config,capabilities});
+  controller.send({type:'start',session,config,capabilities});
   return{
     get pid(){return controller.pid;},
-    setCapabilities(value){if(!stopped)controller.send({type:'capabilities',value});},
-    cancelComputerUse(){if(!stopped)controller.send({type:'cancel'});},
-    stop(){if(stopped)return;stopped=true;if(controller.connected)controller.send({type:'stop'});}
+    setCapabilities(value){if(!stopped)controller.send({type:'capabilities',session,value});},
+    cancelComputerUse(){if(!stopped)controller.send({type:'cancel',session});},
+    stop(){if(stopped)return;stopped=true;if(controller.connected)controller.send({type:'stop',session});}
   };
 }
 module.exports={createAdminController,attachAdminRuntime};
