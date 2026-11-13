@@ -30,7 +30,11 @@ $stderr = Join-Path $env:RUNNER_TEMP 'metis-installed-startup.stderr.log'
 # Hosted Windows has no usable accelerated GPU for a restricted test token.
 # Match the Electron test suites' CPU rendering; keep all renderer sandboxes.
 $renderArguments = '--disable-gpu --disable-software-rasterizer --in-process-gpu'
-$process = Start-Process -FilePath $exe -ArgumentList $renderArguments -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+$launched = & node (Join-Path $PSScriptRoot 'spawn-installed.cjs') $exe $stdout $stderr $renderArguments
+if ($LASTEXITCODE -ne 0) { throw 'Standard installed-app launch failed.' }
+$launch = $launched | ConvertFrom-Json
+if (-not $launch.mediumParent) { throw 'Installed-app launcher is not a standard process.' }
+$process = Get-Process -Id $launch.pid
 $deadline = (Get-Date).AddSeconds(30)
 do {
   Start-Sleep -Milliseconds 500
@@ -50,14 +54,22 @@ Start-Sleep -Milliseconds 500
 $process.Refresh()
 if ($process.HasExited) { throw 'Closing the main window stopped background operation.' }
 $originalPid=$process.Id
-$second=Start-Process -FilePath $exe -ArgumentList $renderArguments -PassThru -RedirectStandardOutput (Join-Path $env:RUNNER_TEMP 'metis-second.stdout.log') -RedirectStandardError (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log')
+$launched = & node (Join-Path $PSScriptRoot 'spawn-installed.cjs') $exe (Join-Path $env:RUNNER_TEMP 'metis-second.stdout.log') (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log') $renderArguments
+if ($LASTEXITCODE -ne 0) { throw 'Standard second launch failed.' }
+$second = Get-Process -Id (($launched | ConvertFrom-Json).pid)
 $deadline=(Get-Date).AddSeconds(20)
 do{
  Start-Sleep -Milliseconds 250
  $process.Refresh()
  $reopenedHandle = [MetisOwnWindows]::Find([int]$process.Id)
 }until($reopenedHandle -ne 0 -or (Get-Date) -gt $deadline)
-if($reopenedHandle -eq 0 -or $process.HasExited){throw 'Launching the installed app again did not reopen its existing window.'}
+if($reopenedHandle -eq 0 -or $process.HasExited){
+ Get-Content $stderr -Tail 40 -ErrorAction SilentlyContinue | Write-Output
+ Get-Content (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log') -Tail 40 -ErrorAction SilentlyContinue | Write-Output
+ [MetisOwnWindows]::Describe([int]$process.Id) | Write-Output
+ [MetisOwnWindows]::Describe([int]$second.Id) | Write-Output
+ throw 'Launching the installed app again did not reopen its existing window.'
+}
 # Chromium may recreate a frameless native HWND during a visibility/style change.
 # Source integration separately asserts the SAME BrowserWindow/WebContents and
 # authenticated connection; here enforce one visible workspace and the same PID.

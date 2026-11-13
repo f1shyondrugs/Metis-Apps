@@ -148,6 +148,7 @@ fs.mkdirSync(userDataDir, { recursive: true });
 app.setPath("userData", userDataDir);
 const traceStartup=phase=>{if(process.env.METIS_DESKTOP_TEST_DATA)console.error("METIS_STARTUP",phase);};
 traceStartup("profile-configured");
+if(process.env.METIS_DESKTOP_TEST_DATA)traceStartup("profile-id-"+require("node:crypto").createHash("sha256").update(path.resolve(userDataDir).toLowerCase()).digest("hex").slice(0,12));
 let window;
 let tray;
 let runtime;
