@@ -63,6 +63,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Standard second launch failed.' }
 $deadline = (Get-Date).AddSeconds(15)
 while (!(Test-Path $receipt) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 50 }
 $second = Get-Process -Id ((Get-Content $receipt -Raw | ConvertFrom-Json).pid)
+# Pin a real process handle while this short launcher is still alive. A
+# Get-Process object alone can lose ExitCode when the kernel PID is retired.
+$null = $second.Handle
 $deadline=(Get-Date).AddSeconds(20)
 do{
  Start-Sleep -Milliseconds 250
@@ -84,7 +87,10 @@ if(!$second.WaitForExit(15000)){
  Get-Content (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log') -Tail 50 -ErrorAction SilentlyContinue | Write-Output
  throw 'Second launcher did not exit.'
 }
-if($second.ExitCode -ne 0){throw 'Second launcher failed.'}
+if($second.ExitCode -ne 0){
+ Get-Content (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log') -Tail 50 -ErrorAction SilentlyContinue | Write-Output
+ throw ("Second launcher failed: exit='" + $second.ExitCode + "', exited=" + $second.HasExited)
+}
 if($process.Id -ne $originalPid){throw 'Reopening replaced the background process.'}
 Write-Output 'WINDOWS_INSTALLED_CLOSE_AND_SECOND_LAUNCH_REOPEN_OK'
 Stop-Process -Id $process.Id
