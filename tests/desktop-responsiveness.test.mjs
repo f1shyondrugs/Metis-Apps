@@ -12,7 +12,7 @@ const source=fs.readFileSync(new URL("../desktop/main.cjs",import.meta.url),"utf
 function fixture(t){
  const directory=fs.mkdtempSync(path.join(os.tmpdir(),"metis-ui-responsiveness-"));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
  let syncCalls=0;const pending=[],menus=[],sent=[];
- const electron={app:{getPath:()=>directory,getVersion:()=>"test",setPath(){},setName(){},commandLine:{appendSwitch(){}},requestSingleInstanceLock:()=>false,whenReady:()=>new Promise(()=>{}),quit(){}},safeStorage:{},
+ const electron={app:{getPath:()=>directory,getVersion:()=>"test",setPath(){},setName(){},commandLine:{appendSwitch(){}},requestSingleInstanceLock:()=>false,whenReady:()=>new Promise(()=>{}),quit(){},exit(){}},safeStorage:{},
   Menu:{buildFromTemplate:template=>template},Notification:{isSupported:()=>false}};
  class Worker extends EventEmitter { constructor(){super();pending.push((error,stdout)=>this.emit("message",error?{ok:false,error:error.message}:{ok:true,stdout:stdout.trim()}))} terminate(){return Promise.resolve()} }
  const child={spawnSync(){syncCalls++;return{status:0,stdout:"True",stderr:""}},execFile(_file,_args,_options,callback){pending.push(callback);return{}}};

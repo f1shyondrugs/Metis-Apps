@@ -1,6 +1,21 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
-const {forwardSecondInstance}=require('../src/main/reopen.cjs');
+const {forwardSecondInstance,claimDesktopInstance}=require('../src/main/reopen.cjs');
+test('a primary claims its lock synchronously without a token probe or readiness',()=>{
+ const calls=[];assert.equal(claimDesktopInstance({app:{requestSingleInstanceLock:()=>{calls.push('lock');return true;},whenReady:()=>assert.fail(),exit:()=>assert.fail()},platform:'win32',readElevation:()=>assert.fail(),requestActivation:()=>assert.fail()}),true);assert.deepEqual(calls,['lock']);
+});
+test('a normal second launcher signals and exits before readiness or GPU startup',()=>{
+ const calls=[];assert.equal(claimDesktopInstance({app:{requestSingleInstanceLock:()=>false,whenReady:()=>assert.fail(),exit:code=>calls.push('exit:'+code)},platform:'win32',readElevation:()=>{calls.push('query');return 'user';},requestActivation:()=>calls.push('signal')}),false);assert.deepEqual(calls,['query','signal','exit:0']);
+});
+test('a High or unverified second launcher never writes a Medium activation marker',()=>{
+ for(const mode of ['administrator','unknown']){const calls=[];claimDesktopInstance({app:{requestSingleInstanceLock:()=>false,exit:code=>calls.push(code)},platform:'win32',readElevation:()=>mode,requestActivation:()=>assert.fail()});assert.deepEqual(calls,[0]);}
+});
+test('a failed short token query cannot stall reopening or stop the primary',()=>{
+ const calls=[];claimDesktopInstance({app:{requestSingleInstanceLock:()=>false,exit:code=>calls.push('exit:'+code)},platform:'win32',readElevation:()=>{throw Error('query timed out');},requestActivation:()=>assert.fail(),onError:error=>calls.push(error.message)});assert.deepEqual(calls,['query timed out','exit:0']);
+});
+test('non-Windows secondary launchers exit without OS permission discovery',()=>{
+ const calls=[];claimDesktopInstance({app:{requestSingleInstanceLock:()=>false,exit:code=>calls.push(code)},platform:'linux',readElevation:()=>assert.fail(),requestActivation:()=>assert.fail()});assert.deepEqual(calls,[0]);
+});
 const {REQUEST_FILE,requestWindowActivation,listenForWindowActivation}=require('../src/main/window-activation.cjs');
 function scenario(values={}){
  const calls=[];

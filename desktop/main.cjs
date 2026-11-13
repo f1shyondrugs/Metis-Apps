@@ -649,7 +649,20 @@ function setupUpdates() {
   setInterval(check, 6 * 60 * 60 * 1000);
 }
 
-void (async()=>{
+const ownsDesktopInstance=require("./src/main/reopen.cjs").claimDesktopInstance({
+ app,platform:process.platform,
+ readElevation:()=>{
+  const {execFileSync}=require("node:child_process");
+  const value=execFileSync("powershell.exe",["-NoProfile","-NonInteractive","-Command",
+   "$p=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent());$p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)"],
+   {encoding:"utf8",windowsHide:true,timeout:1500,maxBuffer:4096}).trim();
+  return value==="False"?"user":value==="True"?"administrator":"unknown";
+ },
+ requestActivation:()=>require("./src/main/window-activation.cjs").requestWindowActivation(userDataDir),
+ onError:error=>traceStartup("secondary-activation-"+error.message)
+});
+if(ownsDesktopInstance)void (async()=>{
+traceStartup("primary-lock");
 await app.whenReady();
 traceStartup("electron-ready");
 if(process.platform==="win32"){
@@ -659,8 +672,10 @@ if(process.platform==="win32"){
  }catch{windowsElevation="unknown";}
  traceStartup("rights-"+windowsElevation);
  if(windowsElevation==="administrator"){
-  // Profile/name must already be configured before appReady, but no elevated
-  // web window, renderer, tray, pairing read or instance lock is ever created.
+  // A cold High launcher has no UI/runtime to preserve. Release its startup
+  // lock before handing off to the verified normal shell token; cancellation
+  // of device UAC never enters this path and never releases the normal lock.
+  app.releaseSingleInstanceLock();
   await new Promise((resolve,reject)=>{
    const worker=new Worker(path.join(__dirname,"src/main/normal-user-process.cjs"),{workerData:{development:!app.isPackaged,role:"desktop"}});
    worker.once("message",result=>result.ok?resolve(result.pid):reject(Error(result.error||"Start Metis normally from the Start menu.")));
@@ -669,26 +684,12 @@ if(process.platform==="win32"){
   app.exit(0);return;
  }
 }
-if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
-  const { forwardSecondInstance } = require("./src/main/reopen.cjs");
-  void forwardSecondInstance({
-    platform: process.platform,
-    ready: () => app.whenReady(),
-    isElevated,
-    requestActivation: () => require("./src/main/window-activation.cjs").requestWindowActivation(userDataDir),
-    reportError: () => dialog.showErrorBox(APP_NAME, "Metis is still running, but the window could not be reopened. Use Open Metis from the tray."),
-    // This process owns no windows or device connection. Exit it directly;
-    // packaged updater/GPU shutdown hooks must not keep a second launcher alive.
-    quit: () => {traceStartup("secondary-signal-and-exit");app.exit(0);},
-  });
-} else {
-  traceStartup("primary-lock");
   app.on("second-instance", (_event,_argv,_cwd,hint) => {
     // This untrusted hint changes presentation only, never permissions or UAC.
     if(getWindowsElevation()==="user"&&hint?.windowsElevation==="administrator"){
       status.error="The desktop app stays in Standard user mode. Enable the Administrator Remote Client here and confirm Windows UAC.";
       void desktopReady.then(()=>{showWindow();broadcast();});
-    }else void showDesktop();
+    }else void desktopReady.then(()=>showDesktop());
   });
   app.on("activate", () => void showDesktop());
   let markDesktopReady;
@@ -784,7 +785,6 @@ if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
     administratorHost.shutdown();
   });
   app.on("window-all-closed", () => {});
-}
 })().catch(error=>{traceStartup("failed-"+error.message);dialog.showErrorBox(APP_NAME,error.message||"Metis could not start.");app.quit();});
 
 module.exports = { showDesktop, showWindow, getDesktop: () => desktop, getDeviceWindow: () => window, getRuntimePid: () => runtime?.pid, getAssistant: () => assistant, getAnnotationOverlay: () => annotationOverlay, publicState };
