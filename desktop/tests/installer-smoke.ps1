@@ -21,6 +21,8 @@ foreach ($shortcut in $shortcutPaths) {
   if ($wsh.CreateShortcut($shortcut).TargetPath -ne $exe) { throw "Shortcut target mismatch: $shortcut" }
 }
 Write-Output 'WINDOWS_INSTALL_REGISTRATION_OK'
+& node (Join-Path $PSScriptRoot 'verify-split-asar.cjs') (Join-Path $installDir 'resources\\app.asar')
+if ($LASTEXITCODE -ne 0) { throw 'Installed background host source verification failed.' }
 $env:METIS_DESKTOP_TEST_DATA = Join-Path $env:RUNNER_TEMP 'metis-installer-data'
 $process = Start-Process -FilePath $exe -PassThru
 $deadline = (Get-Date).AddSeconds(30)

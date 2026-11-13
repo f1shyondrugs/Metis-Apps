@@ -51,9 +51,19 @@ async function main(){
  ipcMain.removeListener('assistant:regions',measure);
  console.log('ASSISTANT_PORTALED_POPOVER_GEOMETRY_AND_REPOSITION_OK');
  assistant.close(); await assistant.open();
- await wc.executeJavaScript('metisAssistant.configure({voiceConfigured:false,chatId:"fixture-chat"})');
- assert.equal(win.isFocusable(),true);
- console.log('ASSISTANT_WITHOUT_VOICE_AUTOFOCUSES_OK');
+ assert.equal(win.isVisible(),true,'Reopened normal assistant must be visible');
+ const autoFocus=await wc.executeJavaScript('metisAssistant.configure({voiceConfigured:false,chatId:"fixture-chat"})');
+ if(process.platform==='win32'&&autoFocus.editing===false){
+  // Windows may refuse a background/service-launched process foreground focus.
+  // The product deliberately falls back to passive mode instead of stealing it.
+  assert.equal(win.isFocusable(),false);
+  assert.equal(require('../src/main/assistant-focus.cjs').createForegroundRestore().isActive(win),false);
+  await until(()=>wc.executeJavaScript('events.includes("passive")'));
+  console.log('ASSISTANT_WINDOWS_FOREGROUND_REFUSAL_STAYS_PASSIVE_OK');
+ }else{
+  assert.equal(autoFocus.editing,true);assert.equal(win.isFocusable(),true);
+  console.log('ASSISTANT_WITHOUT_VOICE_AUTOFOCUSES_OK');
+ }
  assistant.setHideFromCapture(false);
  assert.equal(win.isContentProtected(),false);
  assistant.setHideFromCapture(true);
