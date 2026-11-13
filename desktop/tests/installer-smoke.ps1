@@ -27,7 +27,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Installed background host source verification 
 $env:METIS_DESKTOP_TEST_DATA = Join-Path $env:RUNNER_TEMP 'metis-installer-data'
 $stdout = Join-Path $env:RUNNER_TEMP 'metis-installed-startup.stdout.log'
 $stderr = Join-Path $env:RUNNER_TEMP 'metis-installed-startup.stderr.log'
-$process = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+# Hosted Windows has no usable accelerated GPU for a restricted test token.
+# Match the Electron test suites' CPU rendering; keep all renderer sandboxes.
+$renderArguments = '--disable-gpu --disable-software-rasterizer'
+$process = Start-Process -FilePath $exe -ArgumentList $renderArguments -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
 $deadline = (Get-Date).AddSeconds(30)
 do {
   Start-Sleep -Milliseconds 500
@@ -47,7 +50,7 @@ Start-Sleep -Milliseconds 500
 $process.Refresh()
 if ($process.HasExited) { throw 'Closing the main window stopped background operation.' }
 $originalPid=$process.Id
-$second=Start-Process -FilePath $exe -PassThru -RedirectStandardOutput (Join-Path $env:RUNNER_TEMP 'metis-second.stdout.log') -RedirectStandardError (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log')
+$second=Start-Process -FilePath $exe -ArgumentList $renderArguments -PassThru -RedirectStandardOutput (Join-Path $env:RUNNER_TEMP 'metis-second.stdout.log') -RedirectStandardError (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log')
 $deadline=(Get-Date).AddSeconds(20)
 do{
  Start-Sleep -Milliseconds 250
