@@ -146,6 +146,8 @@ app.commandLine.appendSwitch("lang", "en-US");
 const userDataDir = process.env.METIS_DESKTOP_TEST_DATA || path.join(app.getPath("appData"), "MetisAI", "RemoteClient");
 fs.mkdirSync(userDataDir, { recursive: true });
 app.setPath("userData", userDataDir);
+const traceStartup=phase=>{if(process.env.METIS_DESKTOP_TEST_DATA)console.error("METIS_STARTUP",phase);};
+traceStartup("profile-configured");
 let window;
 let tray;
 let runtime;
@@ -649,11 +651,13 @@ function setupUpdates() {
 
 void (async()=>{
 await app.whenReady();
+traceStartup("electron-ready");
 if(process.platform==="win32"){
  try{
   const value=await runPowerShell("$identity = [Security.Principal.WindowsIdentity]::GetCurrent(); $principal = [Security.Principal.WindowsPrincipal]::new($identity); $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)");
   windowsElevation=value==="True"?"administrator":value==="False"?"user":"unknown";
  }catch{windowsElevation="unknown";}
+ traceStartup("rights-"+windowsElevation);
  if(windowsElevation==="administrator"){
   // Profile/name must already be configured before appReady, but no elevated
   // web window, renderer, tray, pairing read or instance lock is ever created.
@@ -676,6 +680,7 @@ if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
     quit: () => app.quit(),
   });
 } else {
+  traceStartup("primary-lock");
   app.on("second-instance", (_event,_argv,_cwd,hint) => {
     // This untrusted hint changes presentation only, never permissions or UAC.
     if(getWindowsElevation()==="user"&&hint?.windowsElevation==="administrator"){
@@ -739,11 +744,13 @@ if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
     desktopProbeTimer = setInterval(() => { probeDesktop().catch(() => {}); }, 20_000);
     desktopProbeTimer.unref?.();
     registerIpc();
+    traceStartup("creating-windows");
     createWindow();
     tray = new Tray(trayImage());
     updateTray();
     void getAutostart();
     await showDesktop();
+    traceStartup("desktop-visible-"+desktop.win.isVisible());
     markDesktopReady();
     if(status.accessMismatch){showWindow();broadcast();}
     if (config) {
@@ -776,6 +783,6 @@ if (!app.requestSingleInstanceLock({windowsElevation:getWindowsElevation()})) {
   });
   app.on("window-all-closed", () => {});
 }
-})().catch(error=>{dialog.showErrorBox(APP_NAME,error.message||"Metis could not start.");app.quit();});
+})().catch(error=>{traceStartup("failed-"+error.message);dialog.showErrorBox(APP_NAME,error.message||"Metis could not start.");app.quit();});
 
 module.exports = { showDesktop, showWindow, getDesktop: () => desktop, getDeviceWindow: () => window, getRuntimePid: () => runtime?.pid, getAssistant: () => assistant, getAnnotationOverlay: () => annotationOverlay, publicState };
