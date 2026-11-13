@@ -23,7 +23,7 @@ function launchStandard(executable,args,{env=process.env,cwd=process.cwd()}={}){
   if(!restrict(ptr(original),5,1,disabled,0,null,0,null,restricted))throw Error('Test restricted token '+last());
   const ownSid=Buffer.from(require('../src/main/windows-token-identity.cjs').currentTokenIdentity().sid,'hex');
   if(!sidString(ownSid,sidTextPointer))throw Error('Test owner SID '+last());
-  const ownerName=koffi.decode(ptr(sidTextPointer),'str16');
+  const ownerName=koffi.decode(sidTextPointer,'str16');
   const owner=Buffer.alloc(8);owner.writeBigUInt64LE(koffi.address(ownSid));
   if(!set(ptr(restricted),4,owner,8))throw Error('Test token owner '+last());
   ownSid.fill(0);
