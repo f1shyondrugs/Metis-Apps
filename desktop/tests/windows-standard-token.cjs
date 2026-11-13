@@ -11,9 +11,10 @@ function launchStandard(executable,args,{env=process.env,cwd=process.cwd()}={}){
  const original=Buffer.alloc(8),restricted=Buffer.alloc(8),sid=Buffer.alloc(8),adminSid=Buffer.alloc(8),descriptor=Buffer.alloc(8),sidTextPointer=Buffer.alloc(8),last=()=>kernel.func('uint32_t GetLastError()')();
  const free=kernel.func('uintptr_t LocalFree(uintptr_t)');
  const sidString=adv.func('bool ConvertSidToStringSidW(void *,void *)');
- const security=adv.func('bool ConvertStringSecurityDescriptorToSecurityDescriptorW(void *,uint32_t,void *,void *)');
+ const security=adv.func('bool ConvertStringSecurityDescriptorToSecurityDescriptorW(str16,uint32_t,_Out_ void **,void *)');
+ let securityDescriptor=null;
  const setObject=adv.func('uint32_t SetSecurityInfo(uintptr_t,uint32_t,uint32_t,void *,void *,void *,void *)');
- const getDacl=adv.func('bool GetSecurityDescriptorDacl(void *,void *,void *,void *)');
+ const getDacl=adv.func('bool GetSecurityDescriptorDacl(void *,_Out_ int *,_Out_ void **,_Out_ int *)');
  try{
   if(!open(kernel.func('uintptr_t GetCurrentProcess()')(),0xF01FF,original))throw Error('Test token open '+last());
   if(!convert(wide('S-1-5-32-544'),adminSid))throw Error('Test administrator SID '+last());
@@ -27,15 +28,21 @@ function launchStandard(executable,args,{env=process.env,cwd=process.cwd()}={}){
   const owner=Buffer.alloc(8);owner.writeBigUInt64LE(koffi.address(ownSid));
   if(!set(ptr(restricted),4,owner,8))throw Error('Test token owner '+last());
   ownSid.fill(0);
-  if(!security(wide('D:P(A;;GA;;;'+ownerName+')(A;;GA;;;SY)'),1,descriptor,null))throw Error('Test token DACL '+last());
+  const returned=[null];
+  if(!security('D:P(A;;GA;;;'+ownerName+')(A;;GA;;;SY)',1,returned,null))throw Error('Test token DACL '+last());
+  securityDescriptor=returned[0];
+  console.log('TEST_LIMITED_TOKEN_DESCRIPTOR_READY');
   // A High-created restricted token otherwise retains a High-owned token DACL.
   // Chromium's still-enabled child sandbox must be able to duplicate the
   // process's OWN limited token, exactly as on a real filtered user account.
-  const acl=Buffer.alloc(8),present=Buffer.alloc(4),defaulted=Buffer.alloc(4);
-  if(!getDacl(ptr(descriptor),present,acl,defaulted)||!present.readUInt32LE())throw Error('Test token ACL extraction '+last());
-  const accessError=setObject(ptr(restricted),6,4,null,null,ptr(acl),null);
+  const acl=[null],present=[0],defaulted=[0];
+  if(!getDacl(securityDescriptor,present,acl,defaulted)||!present[0]||!acl[0])throw Error('Test token ACL extraction '+last());
+  console.log('TEST_LIMITED_TOKEN_DACL_EXTRACTED');
+  const accessError=setObject(ptr(restricted),6,4,null,null,acl[0],null);
   if(accessError!==0)throw Error('Test token object access '+accessError);
-  if(!set(ptr(restricted),6,acl,8))throw Error('Test default token access '+last());
+  console.log('TEST_LIMITED_TOKEN_SELF_ACCESS_SET');
+  const aclInfo=Buffer.alloc(8);aclInfo.writeBigUInt64LE(koffi.address(acl[0]));
+  if(!set(ptr(restricted),6,aclInfo,8))throw Error('Test default token access '+last());
   if(!convert(wide('S-1-16-8192'),sid))throw Error('Test integrity SID '+last());
   const label=Buffer.alloc(28);label.writeBigUInt64LE(BigInt(ptr(sid)));label.writeUInt32LE(0x20,8);
   if(!set(ptr(restricted),25,label,28))throw Error('Test medium integrity '+last());
@@ -53,6 +60,6 @@ function launchStandard(executable,args,{env=process.env,cwd=process.cwd()}={}){
   const allowed=koffi.load('user32.dll').func('bool AllowSetForegroundWindow(uint32_t)')(0xFFFFFFFF);
   console.log('TEST_FOREGROUND_ELIGIBILITY',Boolean(allowed));
   return {pid:result.readUInt32LE(16),handle:Number(result.readBigUInt64LE()),close};
- }finally{for(const value of [descriptor,sidTextPointer,adminSid,sid])if(ptr(value))free(ptr(value));if(ptr(restricted))close(ptr(restricted));if(ptr(original))close(ptr(original));}
+ }finally{if(securityDescriptor)free(Number(koffi.address(securityDescriptor)));for(const value of [descriptor,sidTextPointer,adminSid,sid])if(ptr(value))free(ptr(value));if(ptr(restricted))close(ptr(restricted));if(ptr(original))close(ptr(original));}
 }
 module.exports={launchStandard};
