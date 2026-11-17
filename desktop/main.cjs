@@ -160,6 +160,8 @@ let quitting = false;
 let previousConnection = "offline";
 const updates = require('./src/main/app-updates.cjs').createUpdateState();
 const appUpdate = updates.value;
+let updateController;
+let updateCheckTimer, updateInterval;
 const status = { connection: "offline", error: "", update: "", desktopAvailable: false, desktopReason: "Checking desktop permissions…", platform: process.platform };
 let desktopProbeTimer;
 async function probeDesktop() {
@@ -315,7 +317,7 @@ function trayImage() {
 
 function updateTray() {
   if (!tray) return;
-  const key = JSON.stringify([status.connection, status.deviceElevation, Boolean(config), autostartEnabled, overlayPreferences?.getAssistantShortcuts?.(), annotationOverlay?.status()]);
+  const key = JSON.stringify([status.connection, status.deviceElevation, Boolean(config), autostartEnabled, appUpdate.phase, overlayPreferences?.getAssistantShortcuts?.(), annotationOverlay?.status()]);
   if (key === lastTrayKey) return;
   lastTrayKey = key;
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -333,6 +335,13 @@ function updateTray() {
     { label: "Start at login", type: "checkbox", checked: autostartEnabled,
       click: async (item) => { try { await setAutostart(item.checked); } catch (error) { lastTrayKey = ""; status.error = error.message; broadcast(); } } },
     { type: "separator" },
+    { label: "Check for updates", click: () => void checkUpdates() },
+    { label: "Install downloaded update", enabled: Boolean(updateController?.ready), click: () => { quitting=true;app.quit(); } },
+    { label: "Export update diagnostics…", click: async () => {
+      const result=await dialog.showSaveDialog({title:"Export update diagnostics",defaultPath:"metis-update-diagnostics.json",filters:[{name:"JSON",extensions:["json"]}]});
+      if(!result.canceled && result.filePath)try{fs.writeFileSync(result.filePath,JSON.stringify(updateController?.report()||{phase:"not-initialized"},null,2),{mode:0o600});}
+      catch{dialog.showErrorBox(APP_NAME,"The update diagnostics could not be saved.");}
+    } },
     { label: "Quit", click: () => { quitting = true; app.quit(); } },
   ]));
 }
@@ -617,36 +626,25 @@ function configureUpdater() {
 
 async function checkUpdates() {
   if (!app.isPackaged) return "Updates are available in installed builds";
-  if (!configureUpdater()) return "Updates are unavailable in this build";
-  updates.checking(); status.update=appUpdate.message; broadcast();
-  try { await autoUpdater.checkForUpdates(); }
-  catch (error) { updates.error(error); status.update=appUpdate.message; broadcast(); }
+  if(!updateController)setupUpdates();
+  if(!updateController)return "Updates are unavailable in this build";
+  await updateController.check();
   return status.update;
 }
 
 function setupUpdates() {
   if (!app.isPackaged) return;
-  autoUpdater.autoDownload = true;
-  autoUpdater.on("update-available", info => {
-    updates.available(info); status.update = appUpdate.message;
-    broadcast();
+  if(updateController)return;
+  configureUpdater();
+  updateController=require("./src/main/update-controller.cjs").createUpdateController({
+    updater:autoUpdater,state:updates,version:app.getVersion(),
+    diagnosticsFile:path.join(userDataDir,"update-diagnostics.json"),
+    changed:()=>{status.update=appUpdate.message;broadcast();},
+    ready:()=>{if(Notification.isSupported())new Notification({title:APP_NAME,body:appUpdate.message}).show();},
   });
-  autoUpdater.on("update-not-available", () => {
-    updates.current(); status.update = appUpdate.message;
-    broadcast();
-  });
-  autoUpdater.on("update-downloaded", info => {
-    updates.ready(info); status.update = appUpdate.message;
-    broadcast();
-    if (Notification.isSupported()) new Notification({ title: APP_NAME, body: status.update }).show();
-  });
-  autoUpdater.on("error", (error) => {
-    updates.error(error); status.update = appUpdate.message;
-    broadcast();
-  });
-  const check = () => void checkUpdates();
-  setTimeout(check, 20_000);
-  setInterval(check, 6 * 60 * 60 * 1000);
+  const check=()=>void checkUpdates();
+  updateCheckTimer=setTimeout(check,20_000);
+  updateInterval=setInterval(check,6*60*60*1000);
 }
 
 const ownsDesktopInstance=require("./src/main/reopen.cjs").claimDesktopInstance({
@@ -769,24 +767,29 @@ if(process.platform==="win32"){
     setupUpdates();
     // Device permissions are requested from local settings when explicitly needed.
   });
-  let shutdownStarted=false,shutdownFinished=false;
-  app.on("before-quit", event => {
-    // One tray owns both processes. Allow the private shutdown frame to drain
-    // before the normal app exits; channel loss also stops the elevated host.
-    if(process.platform==="win32"&&administratorHost.connected&&!shutdownFinished){
-      event.preventDefault();
-      if(!shutdownStarted){shutdownStarted=true;quitting=true;++runtimeEpoch;++pairingEpoch;administratorHost.shutdown();setTimeout(()=>{shutdownFinished=true;app.quit();},400);}
-      return;
-    }
-    activationListener?.close();
-    ++runtimeEpoch;++pairingEpoch;
-    quitting = true;
-    computerUseOverlay?.hide();
-    assistant?.destroy();
-    annotationOverlay?.destroy();
-    runtime?.stop();
-    administratorHost.shutdown();
+  const updateShutdown=require("./src/main/update-shutdown.cjs").createUpdateShutdown({
+    ready:()=>Boolean(updateController?.ready),
+    drain:async wantsInstall=>{
+      const pids=[runtime?.pid,administratorHost.pid];
+      const hadAdministrator=administratorHost.connected;
+      quitting=true;++runtimeEpoch;++pairingEpoch;
+      runtime?.stop();administratorHost.shutdown();
+      if(wantsInstall)await require("./src/main/update-controller.cjs").waitForProcessExit(pids);
+      else if(hadAdministrator)await new Promise(resolve=>setTimeout(resolve,400));
+    },
+    cleanup:()=>{
+      clearTimeout(updateCheckTimer);clearInterval(updateInterval);
+      activationListener?.close();computerUseOverlay?.hide();
+      assistant?.destroy();annotationOverlay?.destroy();
+    },
+    install:()=>updateController.install(),
+    quit:()=>app.quit(),
+    onError:error=>{
+      quitting=false;updates.error({message:"Update installation could not finish. Retry Quit or export update diagnostics."});
+      status.update=appUpdate.message;broadcast();
+    },
   });
+  app.on("before-quit",updateShutdown.beforeQuit);
   app.on("window-all-closed", () => {});
 })().catch(error=>{traceStartup("failed-"+error.message);dialog.showErrorBox(APP_NAME,error.message||"Metis could not start.");app.quit();});
 
