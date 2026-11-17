@@ -5,7 +5,7 @@ const {spawnSync}=require('node:child_process');
 assert.equal(require('../src/main/windows-token-identity.cjs').currentTokenIdentity().elevated,false);
 console.log('WINDOWS_E2E_STANDARD_TOKEN_CONFIRMED');
 fs.mkdirSync(path.join(__dirname,'../test-results'),{recursive:true});
-for(const suite of ['native-modules','recent-servers','smoke','unified','assistant','voice-permissions','annotation-overlay','onboarding','onboarding-reduced']){
+for(const suite of ['native-modules','recent-servers','multi-windows','smoke','unified','assistant','voice-permissions','annotation-overlay','onboarding','onboarding-reduced']){
  console.log('WINDOWS_SUITE_START',suite);
  const result=spawnSync(require('electron'),[path.join(__dirname,suite+'.cjs')],{encoding:'utf8',timeout:90000,maxBuffer:16*1024*1024});
  const output=(result.stdout||'')+(result.stderr||'');

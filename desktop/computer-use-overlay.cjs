@@ -73,6 +73,12 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
     // The assistant keeps its perimeter even when it is waiting for input.
   };
   let points=[], waves=6, frame, elapsed=0, previous=performance.now(), lastDraw=-Infinity;
+  let impulses=[], pulseSerial=0;
+  window.metisClick = (x,y) => {
+    if(reduced.matches || document.hidden || !Number.isFinite(x) || !Number.isFinite(y) || x<0 || y<0 || x>svg.clientWidth || y>svg.clientHeight)return;
+    impulses.push({x,y,at:elapsed});if(impulses.length>4)impulses.shift();
+    document.documentElement.dataset.edgePulseSerial=String(++pulseSerial);draw();
+  };
   function resize() {
     const width=svg.clientWidth, height=svg.clientHeight;
     svg.setAttribute("viewBox","0 0 "+width+" "+height);
@@ -93,13 +99,16 @@ function createOverlayHtml(theme = appearance.fallback, cancelShortcut = "Escape
   }
   function draw() {
     const phase=elapsed/1800, tau=2*Math.PI;
+    impulses=reduced.matches?[]:impulses.filter(pulse=>elapsed-pulse.at<1800);
+    document.documentElement.dataset.edgePulse=impulses.length?'active':'idle';
     smoothLevel = reduced.matches ? 0 : smoothLevel+(voiceLevel-smoothLevel)*(voiceLevel>smoothLevel?.28:.1);
     const response=OVERLAY_AUDIO_REACTIVE?Math.pow(smoothLevel,.7):0;
     const progress=reduced.matches?1:1-Math.pow(1-Math.min(1,(performance.now()-enteredAt)/720),3);
     const moved=points.map(p=>{
       // Integer harmonics close seamlessly at the first/last sample.
       const strength=1+response*5;
-      const displacement=(3*Math.sin(tau*waves*p.t-phase)+1.5*Math.sin(tau*(waves+3)*p.t+phase*.7))*strength+response*18-(1-progress)*100;
+      const kick=impulses.reduce((sum,pulse)=>{const age=elapsed-pulse.at,front=Math.hypot(p.x-pulse.x,p.y-pulse.y)-age*.8;return sum+3*Math.exp(-age/280)+15*Math.exp(-age/850)*Math.exp(-front*front/(2*100*100));},0);
+      const displacement=Math.min(50,(3*Math.sin(tau*waves*p.t-phase)+1.5*Math.sin(tau*(waves+3)*p.t+phase*.7))*strength+response*18+Math.min(19,kick))-(1-progress)*100;
       return {x:p.x+p.nx*displacement,y:p.y+p.ny*displacement};
     });
     const pair=p=>p.x.toFixed(2)+" "+p.y.toFixed(2);
@@ -150,16 +159,17 @@ function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCan
   let cursorHideTimer;
   let cursorDisplayId = null;
   let cursorPosition = null;
+  let pulseSerial = 0;
   let registeredShortcut = null;
   cancelShortcut = shortcut.normalize(cancelShortcut);
   let suppressShortcutUntil = 0;
   const scriptStates = new WeakMap();
 
-  function runScript(overlay, script) {
+  function runScript(overlay, script, pulse = false) {
     if (overlay.isDestroyed() || overlay.webContents.isLoading()) return;
     let state = scriptStates.get(overlay);
-    if (!state) { state = { running: false, latest: null, sent: null }; scriptStates.set(overlay, state); }
-    if (state.running) { state.latest = script; return; }
+    if (!state) { state = { running: false, latest: null, pulse: null, sent: null }; scriptStates.set(overlay, state); }
+    if (state.running) { if(pulse)state.pulse=script;else state.latest = script; return; }
     if (state.sent === script) return;
     state.running = true;
     state.sent = script;
@@ -168,8 +178,10 @@ function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCan
     catch { state.running = false; state.sent = null; return; }
     Promise.resolve(execution).catch(() => { state.sent = null; }).finally(() => {
       state.running = false;
+      const click = state.pulse; state.pulse = null;
       const latest = state.latest; state.latest = null;
-      if (latest && !overlay.isDestroyed()) runScript(overlay, latest);
+      if (click && !overlay.isDestroyed()) { state.latest=latest;runScript(overlay,click,true); }
+      else if (latest && !overlay.isDestroyed()) runScript(overlay, latest);
     });
   }
 
@@ -257,6 +269,15 @@ function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCan
     const overlay = windows.get(display.id);
     if (!overlay) return;
     renderCursor(display, overlay);
+  }
+
+  function pulseClick(x,y) {
+    if(!active || suspended || !Number.isFinite(x) || !Number.isFinite(y))return false;
+    const display=screen.getAllDisplays().find(({bounds:b})=>x>=b.x&&y>=b.y&&x<b.x+b.width&&y<b.y+b.height);
+    const overlay=display && windows.get(display.id);
+    if(!overlay || overlay.isDestroyed() || overlay.webContents.isLoading())return false;
+    runScript(overlay,'window.metisClick?.('+JSON.stringify(x-display.bounds.x)+','+JSON.stringify(y-display.bounds.y)+','+(++pulseSerial)+')',true);
+    return true;
   }
 
   function hideCursor(delay = 0) {
@@ -387,7 +408,7 @@ function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCan
     for (const overlay of windows.values()) runScript(overlay, "window.metisVoiceLevel?.("+level.toFixed(2)+")");
   }
 
-  return { touch, hide, setVoiceState, setVoiceLevel, setAppearance, setHideFromCapture, suspendCapture, resumeCapture, setCancelShortcut, suppressInjectedShortcut, updateCursor, hideCursor };
+  return { touch, hide, setVoiceState, setVoiceLevel, setAppearance, setHideFromCapture, suspendCapture, resumeCapture, setCancelShortcut, suppressInjectedShortcut, updateCursor, pulseClick, hideCursor };
 }
 
 module.exports = { createComputerUseOverlay, createOverlayHtml };

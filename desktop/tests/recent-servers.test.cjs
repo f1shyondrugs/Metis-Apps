@@ -74,7 +74,7 @@ test('labels retain domain or IPv6 address and port without credentials', t => {
   history.select('https://same.example/');
   assert.deepEqual(history.list().slice(0, 2).map(e => e.label), ['same.example', 'same.example/alternate']);
   const tasks = buildJumpList({ entries: history.list(), execPath: 'Metis.exe', packaged: true });
-  assert.deepEqual(tasks[0].items.slice(0, 2).map(e => e.title), ['same.example', 'same.example/alternate']);
+  assert.deepEqual(tasks[1].items.slice(0, 2).map(e => e.title), ['same.example', 'same.example/alternate']);
 });
 test('launcher accepts exactly one strictly bounded opaque ID and cannot navigate arbitrary URLs', t => {
   const { history } = fixture(t, { url: 'https://known.example/' });
@@ -92,16 +92,19 @@ test('Windows Jump List launches remembered IDs, handles quoted development path
   history.select('https://two.example:8443/');
   const options = { entries: history.list(), execPath: 'C:\\Program Files\\Metis\\Metis.exe', appPath: 'C:\\Dev Projects\\Metis\\', packaged: true };
   const categories = buildJumpList(options);
-  assert.equal(categories[0].name, 'Recent Servers');
-  assert.equal(categories[0].items.length, 2);
-  const item = categories[0].items[0];
+  assert.equal(categories[0].type,'tasks');
+  assert.equal(categories[0].items[0].title,'New Window');
+  assert.equal(categories[0].items[0].args,'--metis-new-window');
+  assert.equal(categories[1].name, 'Recent Servers');
+  assert.equal(categories[1].items.length, 2);
+  const item = categories[1].items[0];
   assert.equal(item.title, 'two.example:8443');
   assert.equal(item.program, options.execPath);
   assert.equal(item.args, '--metis-server=' + history.list()[0].id);
   assert.equal(item.args.includes('https:'), false);
-  assert.equal(buildJumpList({ ...options, removedItems: [item] })[0].items.length, 1);
-  assert.deepEqual(buildJumpList({ ...options, removedItems: categories[0].items }), []);
-  const dev = buildJumpList({ ...options, packaged: false })[0].items[0];
+  assert.equal(buildJumpList({ ...options, removedItems: [item] })[1].items.length, 1);
+  assert.equal(buildJumpList({ ...options, removedItems: categories[1].items }).length, 1);
+  const dev = buildJumpList({ ...options, packaged: false })[1].items[0];
   assert.equal(dev.args, '"C:\\Dev Projects\\Metis\\\\" --metis-server=' + history.list()[0].id);
-  assert.deepEqual(buildJumpList({ ...options, entries: [{ ...history.list()[0], id: 'bad' }] }), []);
+  assert.equal(buildJumpList({ ...options, entries: [{ ...history.list()[0], id: 'bad' }] }).length, 1);
 });

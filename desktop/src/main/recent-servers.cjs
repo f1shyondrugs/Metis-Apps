@@ -92,12 +92,15 @@ function buildJumpList({ entries, removedItems = [], execPath, appPath, packaged
     const args = prefix + '--metis-server=' + entry.id;
     if (removedItems.some(item => item && item.args === args && item.title === title)) continue;
     items.push({
-      type: 'task', title, description: 'Open Metis on ' + title,
+      type: 'task', title, description: 'Open a new Metis window on ' + title,
       program: execPath, args, iconPath: execPath, iconIndex: 0
     });
     if (items.length === 10) break;
   }
-  return items.length ? [{ type: 'custom', name: 'Recent Servers', items }] : [];
+  return [
+    { type: 'tasks', items: [{ type:'task',title:'New Window',description:'Open another Metis window',program:execPath,args:prefix+'--metis-new-window',iconPath:execPath,iconIndex:0 }] },
+    ...(items.length ? [{ type: 'custom', name: 'Recent Servers', items }] : [])
+  ];
 }
 
 module.exports = { createRecentServers, serverArgument, buildJumpList };

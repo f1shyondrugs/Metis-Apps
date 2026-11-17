@@ -130,7 +130,7 @@ function createAssistant({
     capturing = true;
     const wasVisible = visible;
     try {
-      if (!getDevice().clientId) throw new Error('Pair this device before sending screen context.');
+      if (!getDevice(server).clientId) throw new Error('Pair this device before sending screen context.');
       const displays = screen.getAllDisplays();
       if (!displays.length || displays.length > 10) throw new Error('Screen context supports 1–10 connected monitors.');
       win.hide(); edges.suspendCapture(); computerOverlay?.suspendCapture(); annotationOverlay?.suspendCapture();
@@ -142,7 +142,7 @@ function createAssistant({
         return { id:String(display.id), name:display.label || source.name, primary:display.id === screen.getPrimaryDisplay().id,
           bounds:display.bounds, scaleFactor:display.scaleFactor, image:source.thumbnail.toDataURL() };
       });
-      return { device:getDevice(), capturedAt:new Date().toISOString(), monitors };
+      return { device:getDevice(server), capturedAt:new Date().toISOString(), monitors };
     } finally {
       capturing = false; edges.resumeCapture(); computerOverlay?.resumeCapture(); annotationOverlay?.resumeCapture();
       if (wasVisible && visible && win && !win.isDestroyed()) {
@@ -154,12 +154,12 @@ function createAssistant({
     if (id !== null && (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(id))) throw new Error('Invalid chat.');
     return id;
   }
-  function openChat() { const id = currentChat; close(); return onOpenChat(id); }
+  function openChat() { const id = currentChat; close(); return onOpenChat(id,server); }
   const handlers = {
     'assistant:ready': event => {
       assertSender(event); ready = true;
       const queue = pending; pending = [];
-      return { gestures:queue, device:getDevice(), shortcuts:bindings(), editing };
+      return { gestures:queue, device:getDevice(server), shortcuts:bindings(), editing };
     },
     // Retain compatibility with the earlier renderer; layout now fills its display.
     'assistant:resize': event => { assertSender(event); },
@@ -224,9 +224,15 @@ function createAssistant({
         else if (!repeat && shortcuts.matches(map.cancel,event,keys) && visible) close();
       };
       const up = event => { held.delete(event.keycode); if (shortcuts.releases(bindings().assistant,event,keys)) gesture.up(); };
-      try { uIOhook.on('keydown',down); uIOhook.on('keyup',up); uIOhook.start(); hookStarted = true; }
-      catch (cause) { uIOhook.removeListener('keydown',down); uIOhook.removeListener('keyup',up); throw cause; }
-      return () => { uIOhook.removeListener('keydown',down); uIOhook.removeListener('keyup',up); uIOhook.stop(); };
+      const mouse = event => {
+        if(event.button!==1 || !Number.isFinite(event.x) || !Number.isFinite(event.y))return;
+        // uiohook uses physical Windows screen pixels; overlay bounds are Electron DIP.
+        const point=process.platform==='win32' ? screen.screenToDipPoint({x:event.x,y:event.y}) : {x:event.x,y:event.y};
+        edges.pulseClick(point.x,point.y);computerOverlay?.pulseClick?.(point.x,point.y);
+      };
+      try { uIOhook.on('keydown',down); uIOhook.on('keyup',up); uIOhook.on('mousedown',mouse); uIOhook.start(); hookStarted = true; }
+      catch (cause) { uIOhook.removeListener('keydown',down); uIOhook.removeListener('keyup',up); uIOhook.removeListener('mousedown',mouse); throw cause; }
+      return () => { uIOhook.removeListener('keydown',down); uIOhook.removeListener('keyup',up); uIOhook.removeListener('mousedown',mouse); uIOhook.stop(); };
     } catch (cause) { error = cause.message; return () => {}; }
   }
   const stopHook = startHook();

@@ -39,6 +39,18 @@ async function main(){
  // Explicit focus changes are not overridden by later settings refreshes.
  assert.equal(win.isFocusable(),false);
  console.log('ASSISTANT_PASSIVE_AND_EXPLICIT_INPUT_MODE_OK');
+ let edges=[];
+ await until(()=>{edges=BrowserWindow.getAllWindows().filter(w=>w!==win&&w.webContents.getURL().startsWith('data:'));return edges.length>0&&edges.every(w=>!w.webContents.isLoading());});
+ for(const edge of edges){edge.webContents.debugger.attach('1.3');await edge.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});}
+ await pause(80);
+ const display=screen.getPrimaryDisplay(),point={x:display.bounds.x+30,y:display.bounds.y+40};
+ const nativePoint=process.platform==='win32'?screen.dipToScreenPoint(point):point;
+ emitter.emit('mousedown',{...nativePoint,button:1});
+ const edge=edges.find(w=>w.getBounds().x===display.bounds.x&&w.getBounds().y===display.bounds.y);
+ await until(()=>edge.webContents.executeJavaScript('Number(document.documentElement.dataset.edgePulseSerial)>0'));
+ assert.equal(win.isFocusable(),false);assert.ok(edges.every(w=>!w.isFocusable()));
+ emitter.emit('mousedown',{...nativePoint,button:2});
+ console.log('ASSISTANT_GLOBAL_CLICK_DPI_ROUTING_AND_PASSIVE_OUTLINE_OK');
  let measured=[];
  const measure=(_event,value)=>{if(_event.sender===wc)measured=value.rects;};
  ipcMain.on('assistant:regions',measure);
@@ -84,7 +96,7 @@ async function main(){
  await assert.rejects(foreign.webContents.executeJavaScript('metisAssistant.capture()'),/Access denied/);foreign.destroy();
  console.log('ASSISTANT_PATH_AND_SENDER_GUARDS_OK');
  emitter.emit('keydown',{keycode:1});assert.equal(escapeClears,1);console.log('ASSISTANT_GLOBAL_ESCAPE_ANNOTATION_CALLBACK_OK');
- assistant.destroy();fixture.close();
+ assistant.destroy();assert.equal(emitter.listenerCount('mousedown'),0);fixture.close();
  console.log('ASSISTANT_OK');
 }
 main().then(()=>{clearTimeout(timeout);app.exit(0);}).catch(error=>{console.error(error);clearTimeout(timeout);app.exit(1);});

@@ -52,7 +52,10 @@ async function main() {
   assert.equal(desktop.getState().server, urls[0]);
   console.log('RECENT_SERVERS_NATIVE_MENU_SWITCH_AND_UNKNOWN_ID_REJECTED_OK');
   const second = desktop.getRecentServers().find(e => e.url === urls[1]);
-  desktop.win.hide();
+  const originalWindow=desktop.activeWindow;
+  const originalContents=desktop.getView().webContents;
+  const before=desktop.getWindows().length;
+  originalWindow.win.hide();
   const child = require('node:child_process').spawn(process.execPath, [
     ...(process.platform === 'linux' && process.getuid?.() === 0 ? ['--no-sandbox'] : []),
     path.join(__dirname, '..'), '--metis-server=' + second.id
@@ -60,12 +63,15 @@ async function main() {
   const exited = new Promise((resolve, reject) => {
     child.once('error', reject); child.once('exit', code => code === 0 ? resolve() : reject(Error('launcher exit ' + code)));
   });
-  await waitFor(() => desktop.win.isVisible() && desktop.getState().mode === 'ready' && desktop.getState().server === urls[1]);
+  await waitFor(() => desktop.getWindows().length===before+1 && desktop.win.isVisible() && desktop.getState().mode === 'ready' && desktop.getState().server === urls[1]);
+  assert.equal(originalWindow.getState().server,urls[0]);
+  assert.equal(originalWindow.getView().webContents,originalContents);
+  assert.notEqual(desktop.getView().webContents,originalContents);
   await exited;
   assert.equal(api.getDesktop(), desktop);
   assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'server.json'))).url, urls[1]);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(directory, 'server.json'))).recentServers, [urls[1], urls[0]]);
-  console.log('RECENT_SERVERS_REAL_SECOND_INSTANCE_QUICK_SWITCH_OK');
+  console.log('RECENT_SERVERS_REAL_SECOND_INSTANCE_NEW_WINDOW_OK');
   // Native desktop host intentionally retains its existing 600px minimum width.
   for (const width of [768, 1440]) {
     desktop.win.setSize(width, 800);

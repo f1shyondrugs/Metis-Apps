@@ -49,6 +49,12 @@ async function main(){
   assert.equal(await wc.executeJavaScript('getComputedStyle(document.querySelector(".edge")).visibility'),'visible');
   assert.equal(await wc.executeJavaScript('getComputedStyle(document.querySelector("circle")).fill'),'rgb(255, 255, 255)');
   const idle=await band();
+  const pulse=await wc.executeJavaScript('(()=>{const p=document.querySelector(".wave"),before=p.getAttribute("d");metisClick(innerWidth/2,32);return {before,after:p.getAttribute("d"),serial:Number(document.documentElement.dataset.edgePulseSerial),active:document.documentElement.dataset.edgePulse}})()');
+  assert.notEqual(pulse.after,pulse.before);assert.ok(pulse.serial>0);assert.equal(pulse.active,'active');
+  if(width===768){fs.mkdirSync(path.join(__dirname,'../test-results'),{recursive:true});await pause(70);fs.writeFileSync(path.join(__dirname,'../test-results/click-reactive-outline.png'),(await wc.capturePage()).toPNG());}
+  assert.ok(await band()<64,'Click waves remain bounded');
+  await pause(1900);
+  assert.equal(await wc.executeJavaScript('document.documentElement.dataset.edgePulse'),'idle');
   await wc.executeJavaScript('metisVoiceState(true,"Metis is listening");metisVoiceLevel(1)');
   await pause(700);
   const loud=await band();
@@ -67,9 +73,11 @@ async function main(){
  assert.equal(await wc.executeJavaScript('matchMedia("(prefers-reduced-motion: reduce)").matches'),true);
  await pause(250);
  const still=await wc.executeJavaScript('document.querySelector(".wave").getAttribute("d")');
+ await wc.executeJavaScript('metisClick(20,20)');
+ assert.equal(await wc.executeJavaScript('document.documentElement.dataset.edgePulse'),'idle');
  await pause(150);
  assert.equal(await wc.executeJavaScript('document.querySelector(".wave").getAttribute("d")'),still);
- console.log('ASSISTANT_WHITE_IDLE_BORDER_AUDIO_RESPONSE_AND_REDUCED_MOTION_OK');
+ console.log('ASSISTANT_WHITE_BORDER_CLICK_AUDIO_RESPONSE_AND_REDUCED_MOTION_OK');
  win.destroy();
 }
 main().then(()=>{clearTimeout(timeout);app.exit(0)}).catch(e=>{console.error(e);clearTimeout(timeout);app.exit(1)});
