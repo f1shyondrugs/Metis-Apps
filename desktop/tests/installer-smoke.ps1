@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'own-windows.ps1')
-if (-not [MetisOwnWindows]::IsWorkspaceTitle('Metis') -or -not [MetisOwnWindows]::IsWorkspaceTitle('Metis — localhost:3000') -or [MetisOwnWindows]::IsWorkspaceTitle('Metis — Remote Client Device Settings') -or [MetisOwnWindows]::IsWorkspaceTitle('Other app')) { throw 'Workspace title classifier failed.' }
+$workspaceTitlePrefix = 'Metis ' + [char]0x2014 + ' '
+if (-not [MetisOwnWindows]::IsWorkspaceTitle('Metis') -or -not [MetisOwnWindows]::IsWorkspaceTitle($workspaceTitlePrefix + 'localhost:3000') -or [MetisOwnWindows]::IsWorkspaceTitle($workspaceTitlePrefix + 'Remote Client Device Settings') -or [MetisOwnWindows]::IsWorkspaceTitle('Other app')) { throw 'Workspace title classifier failed.' }
 Write-Output 'WINDOWS_WORKSPACE_TITLE_CLASSIFIER_OK'
 $expectedVersion = (Get-Content (Join-Path $PSScriptRoot '..\package.json') -Raw | ConvertFrom-Json).version
 if (-not $env:RUNNER_TEMP) { throw 'Installer smoke test is restricted to an isolated CI runner.' }

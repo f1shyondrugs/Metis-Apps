@@ -17,7 +17,7 @@ public static class MetisOwnWindows {
   [StructLayout(LayoutKind.Sequential)] struct Rect { public int Left,Top,Right,Bottom; }
   public static bool IsWorkspaceTitle(string title) {
     if(title=="Metis")return true;
-    const string prefix="Metis — ";
+    const string prefix="Metis \u2014 ";
     if(!title.StartsWith(prefix,StringComparison.Ordinal))return false;
     var host=title.Substring(prefix.Length);Uri uri;
     return Uri.TryCreate("https://"+host,UriKind.Absolute,out uri)&&uri.Authority==host&&uri.AbsolutePath=="/"&&uri.Query==""&&uri.Fragment=="";
