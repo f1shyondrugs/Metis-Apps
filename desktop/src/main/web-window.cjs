@@ -6,6 +6,7 @@ const ROOT = path.join(__dirname, '../..');
 const { DEFAULT_SERVER, normalizeServer, sameOrigin, externalUrl } = require(path.join(ROOT, 'policy.cjs'));
 const APP_ID = process.env.METIS_DESKTOP_TEST_DATA ? 'ai.metis.desktop.test' : 'ai.metis.desktop';
 const { registerWebPermissions } = require('./web-permissions.cjs');
+const { createRecentServers, buildJumpList } = require('./recent-servers.cjs');
 const shellPath = path.join(ROOT, 'ui', 'index.html');
 const shellUrl = pathToFileURL(shellPath).href;
 
@@ -14,6 +15,7 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
   let server = initialServer ? normalizeServer(initialServer) : DEFAULT_SERVER;
   let serverConfigured=Boolean(initialServer);
   try { server = normalizeServer(JSON.parse(fs.readFileSync(configPath, 'utf8')).url);serverConfigured=true; } catch {}
+  const recentServers = createRecentServers({ configPath, initialServer: serverConfigured ? server : undefined });
   let context;
   try { context=require('./client-context.cjs').clientContext(app.getPath('userData')); }
   catch { context=Object.freeze({installationId:''}); } // Optional identity must never stop an existing background client.
@@ -195,26 +197,43 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
       return onAssistant();
     },
     'desktop:state': (event) => { assertLocal(event); return state; },
-    'desktop:connect': (event, value) => {
-      assertLocal(event);
-      try {
-        const next = normalizeServer(value);
-        fs.mkdirSync(path.dirname(configPath), { recursive: true });
-        fs.writeFileSync(configPath + '.tmp', JSON.stringify({ url: next }, null, 2));
-        fs.renameSync(configPath + '.tmp', configPath);
-        server = next; serverConfigured=true;void load();
-        return { ok: true };
-      } catch (error) { return { ok: false, error: error.message }; }
-    },
+    'desktop:connect': (event, value) => { assertLocal(event); return connect(value); },
     'desktop:retry': (event) => { assertLocal(event); void load(); },
     'desktop:settings': (event) => { assertLocal(event); settings(); }
   };
   for (const [channel, handler] of Object.entries(handlers)) ipcMain.handle(channel, handler);
+  function connect(value) {
+    try {
+      server = recentServers.select(value); serverConfigured = true;
+      refreshMenus(); void load();
+      return { ok: true };
+    } catch (error) { return { ok: false, error: error.message }; }
+  }
+  function switchServer(id) {
+    const value = recentServers.resolve(id);
+    if (!value) return false; // Launch arguments can only select locally remembered servers.
+    if (value === server && state.mode === 'ready') return true;
+    const result = connect(value);
+    if (!result.ok) {
+      refreshMenus(); // Restore the active radio item when persisting the selection failed.
+      void dialog.showMessageBox(win, { type: 'error', title: 'Could not switch server', message: result.error });
+    }
+    return result.ok;
+  }
+  function recentMenu() {
+    const entries = recentServers.list();
+    return entries.length ? entries.map(entry => ({
+      id: 'metis-server-' + entry.id, label: entry.label.replace(/&/g, '&&'), type: 'radio', checked: entry.url === server,
+      click: () => { if (win.isMinimized()) win.restore(); win.show(); win.focus(); switchServer(entry.id); }
+    })) : [{ label: 'No recent servers', enabled: false }];
+  }
+  function refreshMenus() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { label: 'Metis', submenu: [
       { label: 'Home', accelerator: 'CmdOrCtrl+Home', click: () => { void load(); } },
       { id: 'metis-device-settings', label: 'Open Remote Client Device Settings', accelerator: onDeviceState().assistant?.shortcuts?.deviceSettings || 'CmdOrCtrl+Shift+D', registerAccelerator: !onDeviceState().assistant?.hotkeyAvailable, click: onDevices },
+      { id: 'metis-recent-servers', label: 'Recent Servers', submenu: recentMenu() },
       { label: 'Change server…', accelerator: 'CmdOrCtrl+,', click: settings },
       { label: 'Open in browser', click: () => openExternal(server) },
       { type: 'separator' },
@@ -230,6 +249,19 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
       { role: 'zoomOut', label: 'Zoom out' }
     ] }
   ]));
+  if (process.platform === 'darwin') app.dock?.setMenu(Menu.buildFromTemplate([
+    { label: 'Recent Servers', submenu: recentMenu() },
+    { label: 'Change server…', click: () => { win.show(); win.focus(); settings(); } }
+  ]));
+  if (process.platform === 'win32' && !process.env.METIS_DESKTOP_TEST_DATA) {
+    try {
+      const { removedItems } = app.getJumpListSettings();
+      const result = app.setJumpList(buildJumpList({ entries: recentServers.list(), removedItems, execPath: process.execPath, appPath: app.getAppPath(), packaged: app.isPackaged }));
+      if (result !== 'ok') console.warn('Metis Recent Servers Jump List:', result);
+    } catch (error) { console.warn('Metis Recent Servers Jump List:', error.message); }
+  }
+  }
+  refreshMenus();
   if (launcher) win.setMenu(null); // Alt must not reveal a hidden native menu on the splash.
   function bindWindow(host) {
     host.webContents.on('will-navigate', event => event.preventDefault());
@@ -245,7 +277,7 @@ async function createDesktop({ onDevices = () => {}, onDeviceState = () => ({}),
   bindWindow(win);
   await win.loadFile(shellPath);
   const initialLoad = serverConfigured ? load() : Promise.resolve(update('welcome'));
-  return { get win(){return win;}, getView: () => view, getState: () => state, getFileDropState:()=>({...dropState}), settings, load, initialLoad };
+  return { get win(){return win;}, getView: () => view, getState: () => state, getFileDropState:()=>({...dropState}), getRecentServers: () => recentServers.list(), switchServer, settings, load, initialLoad };
 }
 function bootstrap() {
   app.commandLine.appendSwitch('lang', 'en-US');

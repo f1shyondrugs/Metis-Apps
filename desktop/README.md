@@ -4,7 +4,7 @@ A single Electron app for Windows, macOS Apple Silicon and Linux x64. The app co
 
 ## Use
 
-The main window opens Metis. **Metis → Change server** selects your server; **Metis → Device settings** (Ctrl/Cmd+Shift+D) opens local device pairing, command history and settings. The tray offers both windows. Closing windows hides them while the connection remains available. **Quit** exits the app and disconnects the device.
+The main window opens Metis. **Metis → Change server** selects your server; **Metis → Device settings** (Ctrl/Cmd+Shift+D) opens local device pairing, command history and settings. **Metis → Recent Servers** lists up to ten remembered server addresses with the active server selected. Click one to switch immediately; the same list is available by right-clicking the Windows taskbar icon or the macOS Dock icon. Windows entries also reopen a closed app on the selected remembered server. Server choices persist locally across app restarts, and switching does not change device pairing or permissions. Use **Change server** to add another address. The tray offers both windows. Closing windows hides them while the connection remains available. **Quit** exits the app and disconnects the device.
 
 Open the app again from its shortcut to restore the existing window after closing it with X. Reopening a running instance does not start another administrator process or request UAC again. A fixed, profile-scoped signal only asks the existing process to show its main window; it cannot carry commands or URLs. The elevated primary never writes or interprets that signal file. Starting the app from a fully stopped state may still require the Windows administrator confirmation for an admin-paired device. User-mode devices never elevate.
 

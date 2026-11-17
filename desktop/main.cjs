@@ -17,6 +17,7 @@ const { pathToFileURL } = require("node:url");
 const APP_NAME = "Metis";
 const { createDesktop } = require("./src/main/web-window.cjs");
 const { normalizeServer, sameOrigin } = require("./policy.cjs");
+const { serverArgument } = require("./src/main/recent-servers.cjs");
 let desktop;
 let desktopOpening;
 let assistant;
@@ -690,7 +691,11 @@ if(process.platform==="win32"){
     if(getWindowsElevation()==="user"&&hint?.windowsElevation==="administrator"){
       status.error="The desktop app stays in Standard user mode. Enable the Administrator Remote Client here and confirm Windows UAC.";
       void desktopReady.then(()=>{showWindow();broadcast();});
-    }else void desktopReady.then(()=>showDesktop());
+    }else void desktopReady.then(async()=>{
+      await showDesktop();
+      const id = serverArgument(_argv);
+      if (id) desktop.switchServer(id);
+    });
   });
   app.on("activate", () => void showDesktop());
   let markDesktopReady;
@@ -754,6 +759,8 @@ if(process.platform==="win32"){
     updateTray();
     void getAutostart();
     await showDesktop();
+    const requestedServer = serverArgument(process.argv);
+    if (requestedServer) desktop.switchServer(requestedServer);
     traceStartup("desktop-visible-"+desktop.win.isVisible());
     markDesktopReady();
     if(status.accessMismatch){showWindow();broadcast();}
