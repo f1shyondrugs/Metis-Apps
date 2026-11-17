@@ -276,7 +276,8 @@ function createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCan
     const display=screen.getAllDisplays().find(({bounds:b})=>x>=b.x&&y>=b.y&&x<b.x+b.width&&y<b.y+b.height);
     const overlay=display && windows.get(display.id);
     if(!overlay || overlay.isDestroyed() || overlay.webContents.isLoading())return false;
-    runScript(overlay,'window.metisClick?.('+JSON.stringify(x-display.bounds.x)+','+JSON.stringify(y-display.bounds.y)+','+(++pulseSerial)+')',true);
+    const bounds=overlay.getContentBounds?.() || overlay.getBounds?.() || display.bounds;
+    runScript(overlay,'window.metisClick?.('+JSON.stringify(x-bounds.x)+','+JSON.stringify(y-bounds.y)+','+(++pulseSerial)+')',true);
     return true;
   }
 

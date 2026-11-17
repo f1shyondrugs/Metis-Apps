@@ -196,6 +196,14 @@ test("click pulses route only to their display, stay passive, and stop when hidd
   overlay.resumeCapture();assert.equal(overlay.pulseClick(10,10),true);
   overlay.hide();assert.equal(overlay.pulseClick(10,10),false);
 });
+test("click coordinates use the actual native content origin when the OS adjusts window bounds",()=>{
+  const {overlay,windows}=fixture();overlay.touch();
+  try{
+    windows[0].getContentBounds=()=>({x:-1910,y:8,width:1920,height:1080});
+    overlay.pulseClick(-1800,120);
+    assert.match(windows[0].scripts.at(-1),/metisClick.*110,112,1/);
+  }finally{overlay.hide()}
+});
 test("click feedback is bounded and cannot be overwritten by a busy cursor stream",async()=>{
   const {overlay,windows}=fixture();overlay.touch();
   try{

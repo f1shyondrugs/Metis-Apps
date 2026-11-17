@@ -46,7 +46,7 @@ async function main(){
  const display=screen.getPrimaryDisplay(),point={x:display.bounds.x+30,y:display.bounds.y+40};
  const nativePoint=process.platform==='win32'?screen.dipToScreenPoint(point):point;
  emitter.emit('mousedown',{...nativePoint,button:1});
- const edge=edges.find(w=>w.getBounds().x===display.bounds.x&&w.getBounds().y===display.bounds.y);
+ const edge=edges.slice().sort((a,b)=>Math.hypot(a.getBounds().x-display.bounds.x,a.getBounds().y-display.bounds.y)-Math.hypot(b.getBounds().x-display.bounds.x,b.getBounds().y-display.bounds.y))[0];
  await until(()=>edge.webContents.executeJavaScript('Number(document.documentElement.dataset.edgePulseSerial)>0'));
  assert.equal(win.isFocusable(),false);assert.ok(edges.every(w=>!w.isFocusable()));
  emitter.emit('mousedown',{...nativePoint,button:2});
