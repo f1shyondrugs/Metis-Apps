@@ -196,6 +196,22 @@ async function main() {
       }finally{await ps("Unregister-ScheduledTask -TaskName "+quote(taskName)+" -Confirm:$false -ErrorAction SilentlyContinue");}
     }
   }finally{testListener?.close();}
+  // Browser-server switching must not reconnect or re-pair the device runtime.
+  const savedRuntimePid = api.getRuntimePid();
+  const alternate = server + '/alternate';
+  assert.equal((await desktop.win.webContents.executeJavaScript('metisDesktop.connect(' + JSON.stringify(alternate) + ')')).ok, true);
+  await waitFor(() => desktop.getState().mode === 'ready' && desktop.getState().server === alternate);
+  await command('after-server-switch');
+  assert.equal(api.getRuntimePid(), savedRuntimePid);
+  assert.equal(authentications, 1);
+  assert.deepEqual(fs.readFileSync(configFile), original);
+  const remembered = desktop.getRecentServers().find(entry => entry.url === new URL(server).href);
+  assert.ok(remembered);
+  assert.equal(desktop.switchServer(remembered.id), true);
+  await waitFor(() => desktop.getState().mode === 'ready' && desktop.getState().server === new URL(server).href);
+  await command('after-recent-server-switch');
+  assert.equal(authentications, 1);
+  console.log('RECENT_SERVER_SWITCH_PRESERVES_DEVICE_PID_CONNECTION_AND_CREDENTIALS_OK');
   if (process.platform === 'darwin') {
     const { utilityProcess } = require('electron');
     const { startDeviceHost } = require('../src/device/runtime.cjs');
@@ -213,22 +229,6 @@ async function main() {
       console.log('MAC_NATIVE_DEVICE_PROCESS_OK');
     } finally { native.stop(); }
   }
-  // Browser-server switching must not reconnect or re-pair the device runtime.
-  const savedRuntimePid = api.getRuntimePid();
-  const alternate = server + '/alternate';
-  assert.equal((await desktop.win.webContents.executeJavaScript('metisDesktop.connect(' + JSON.stringify(alternate) + ')')).ok, true);
-  await waitFor(() => desktop.getState().mode === 'ready' && desktop.getState().server === alternate);
-  await command('after-server-switch');
-  assert.equal(api.getRuntimePid(), savedRuntimePid);
-  assert.equal(authentications, 1);
-  assert.deepEqual(fs.readFileSync(configFile), original);
-  const remembered = desktop.getRecentServers().find(entry => entry.url === new URL(server).href);
-  assert.ok(remembered);
-  assert.equal(desktop.switchServer(remembered.id), true);
-  await waitFor(() => desktop.getState().mode === 'ready' && desktop.getState().server === new URL(server).href);
-  await command('after-recent-server-switch');
-  assert.equal(authentications, 1);
-  console.log('RECENT_SERVER_SWITCH_PRESERVES_DEVICE_PID_CONNECTION_AND_CREDENTIALS_OK');
   const output = path.join(__dirname, '../test-results');
   fs.mkdirSync(output, { recursive: true });
   fs.writeFileSync(path.join(output, 'unified-fixture.png'), (await desktop.getView().webContents.capturePage()).toPNG());
