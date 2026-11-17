@@ -19,7 +19,9 @@ app.whenReady().then(async()=>{
  updater.emit("update-downloaded",{version:"9.0.0"});
  const shutdown=createUpdateShutdown({
   ready:()=>controller.ready,
-  drain:async()=>{const pid=child.pid,exitEvent=once(child,"exit");child.kill();await waitForProcessExit([pid]);await exitEvent;assert.ok(exited);},
+  // Windows can retire the OS process before Node delivers ChildProcess.exit
+  // during Electron's quit sequence. Verify the actual OS lifetime, not event timing.
+  drain:async()=>{const pid=child.pid;child.kill();await waitForProcessExit([pid]);assert.throws(()=>process.kill(pid,0),{code:"ESRCH"});exited=true;},
   cleanup:()=>{cleaned=true;win.destroy();},
   install:()=>controller.install(),quit:()=>app.quit(),
   onError:error=>{console.error(error);app.exit(1);},
