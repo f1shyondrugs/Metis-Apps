@@ -183,6 +183,42 @@ test("slow overlay renderers retain only the newest cursor update", async () => 
     assert.match(calls[1],/199,100,true/);
   } finally {overlay.hide()}
 });
+test("click pulses route only to their display, stay passive, and stop when hidden or capturing",async()=>{
+  const {overlay,windows}=fixture();
+  assert.equal(overlay.pulseClick(20,20),false);
+  overlay.touch();
+  assert.equal(overlay.pulseClick(-1800,120),true);
+  assert.match(windows[0].scripts.at(-1),/metisClick.*120,120,1/);
+  assert.equal(windows[1].scripts.length,0);
+  assert.ok(windows.every(w=>w.ignoreMouse&&w.options.focusable===false));
+  assert.equal(overlay.pulseClick(NaN,3),false);assert.equal(overlay.pulseClick(99999,0),false);
+  overlay.suspendCapture();assert.equal(overlay.pulseClick(10,10),false);
+  overlay.resumeCapture();assert.equal(overlay.pulseClick(10,10),true);
+  overlay.hide();assert.equal(overlay.pulseClick(10,10),false);
+});
+test("click coordinates use the actual native content origin when the OS adjusts window bounds",()=>{
+  const {overlay,windows}=fixture();overlay.touch();
+  try{
+    windows[0].getContentBounds=()=>({x:-1910,y:8,width:1920,height:1080});
+    overlay.pulseClick(-1800,120);
+    assert.match(windows[0].scripts.at(-1),/metisClick.*110,112,1/);
+  }finally{overlay.hide()}
+});
+test("click feedback is bounded and cannot be overwritten by a busy cursor stream",async()=>{
+  const {overlay,windows}=fixture();overlay.touch();
+  try{
+    const calls=[];let finish;
+    windows[1].webContents.executeJavaScript=s=>{calls.push(s);return new Promise(r=>{finish=r})};
+    overlay.updateCursor(20,20);
+    for(let i=0;i<1000;i++){overlay.pulseClick(30+i%10,40);overlay.updateCursor(50+i%10,60);}
+    assert.equal(calls.length,1);
+    finish();for(let i=0;i<8;i++)await Promise.resolve();
+    assert.equal(calls.length,2);assert.match(calls[1],/metisClick.*39,40,1000/);
+    finish();for(let i=0;i<8;i++)await Promise.resolve();
+    assert.equal(calls.length,3);assert.match(calls[2],/metisCursor.*59,60,true/);
+    finish();
+  }finally{overlay.hide();}
+});
 test("ending control releases every overlay renderer and the next action recreates only current displays",()=>{
   const {overlay,windows}=fixture();
   overlay.touch();overlay.hide();

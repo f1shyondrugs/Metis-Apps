@@ -17,27 +17,24 @@ const { pathToFileURL } = require("node:url");
 const APP_NAME = "Metis";
 const { createDesktop } = require("./src/main/web-window.cjs");
 const { normalizeServer, sameOrigin } = require("./policy.cjs");
+const { serverArgument } = require("./src/main/recent-servers.cjs");
 let desktop;
 let desktopOpening;
 let assistant;
 async function showDesktop() {
   if (!desktop || desktop.win.isDestroyed()) {
-    desktopOpening ||= createDesktop({ initialServer: config?.server, onDevices: showWindow, onDeviceState: publicState, onAssistant: () => assistant?.open(), onShortcutsChange: setDesktopShortcuts, onShortcutCapture: value => assistant?.pauseShortcuts(value), onCaptureHidden: setOverlayCaptureHidden, onAutostart: setAutostart, onCheckUpdates: checkUpdates, onDesktopPermissions: async () => {await desktopPermissionStatus(true);await probeDesktop();return publicState();}, shouldHide: () => !quitting })
+    desktopOpening ||= createDesktop({ initialServer: config?.server, initialServerId: serverArgument(process.argv), onDevices: showWindow, onDeviceState: publicState, onAssistant: () => assistant?.open(), onShortcutsChange: setDesktopShortcuts, onShortcutCapture: value => assistant?.pauseShortcuts(value), onCaptureHidden: setOverlayCaptureHidden, onAutostart: setAutostart, onCheckUpdates: checkUpdates, onDesktopPermissions: async () => {await desktopPermissionStatus(true);await probeDesktop();return publicState();}, shouldHide: () => !quitting && (!desktop || desktop.getWindows().length <= 1) })
       .then(value => { desktop = value; return value; }).finally(() => { desktopOpening = null; });
     await desktopOpening;
   }
-  if (desktop.win.isMinimized()) desktop.win.restore();
-  desktop.win.show();
-  desktop.win.focus();
+  await desktop.show();
 }
 async function openDesktopChat(id, expectedServer) {
   await showDesktop();
-  const server = desktop.getState().server;
-  if (expectedServer && !sameOrigin(server,expectedServer)) {
-    desktop.settings();
-    return;
-  }
-  if (id) await desktop.getView()?.webContents.loadURL(new URL("/?c="+encodeURIComponent(id),server).href);
+  const entry = await desktop.openServer(expectedServer || desktop.getState().server);
+  if(entry.getState().mode !== 'ready') await entry.load();
+  if(entry.win.isMinimized())entry.win.restore();entry.win.show();entry.win.focus();
+  if (id) await entry.getView()?.webContents.loadURL(new URL("/?c="+encodeURIComponent(id),entry.getState().server).href);
 }
 const AUTOSTART_TASK = "Metis AI Remote Client";
 let autostartEnabled = false;
@@ -197,6 +194,7 @@ function setDesktopShortcuts(value) {
   assistant?.shortcutsChanged();
   const menuItem = Menu.getApplicationMenu()?.getMenuItemById("metis-device-settings");
   if (menuItem) menuItem.accelerator = next.deviceSettings;
+  desktop?.refreshMenus();
   broadcast();
   return next;
 }
@@ -324,6 +322,7 @@ function updateTray() {
   lastTrayKey = key;
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Open Metis", click: () => void showDesktop() },
+    { label: "New Window", click: () => { void showDesktop().then(()=>desktop.newWindow()).catch(error=>{status.error=error.message;broadcast();}); } },
     { label: "Open Desktop Assistant", accelerator: assistant?.state().hotkey || "Control+Shift+Space", registerAccelerator: false, click: () => void assistant?.open() },
     { label: "Open Remote Client Device Settings", click: () => showWindow() },
     { label: "Screen annotations", submenu: [
@@ -688,7 +687,10 @@ if(process.platform==="win32"){
     if(getWindowsElevation()==="user"&&hint?.windowsElevation==="administrator"){
       status.error="The desktop app stays in Standard user mode. Enable the Administrator Remote Client here and confirm Windows UAC.";
       void desktopReady.then(()=>{showWindow();broadcast();});
-    }else void desktopReady.then(()=>showDesktop());
+    }else void desktopReady.then(async()=>{
+      const id = serverArgument(_argv);
+      await desktop.newWindow(id ? {serverId:id} : {});
+    }).catch(error=>{status.error=error.message;broadcast();});
   });
   app.on("activate", () => void showDesktop());
   let markDesktopReady;
@@ -736,11 +738,11 @@ if(process.platform==="win32"){
     const { createAssistant } = require("./src/main/assistant.cjs");
     assistant = createAssistant({
       getServer: () => desktop?.getState().server || config?.server || require("./policy.cjs").DEFAULT_SERVER,
-      getDevice: () => ({ clientId:status.accessMismatch?"":config?.clientId || "", hostname:os.hostname(), platform:process.platform, version:app.getVersion() }),
+      getDevice: server => ({ clientId:status.accessMismatch||!config||!sameOrigin(server,config.server)?"":config.clientId || "", hostname:os.hostname(), platform:process.platform, version:app.getVersion() }),
       annotationOverlay, onEscape: () => annotationOverlay?.clearAll(),
       computerOverlay:computerUseOverlay, appearance:currentAppearance, hideFromCapture:overlayPreferences.get(),
       getShortcuts: () => overlayPreferences.getAssistantShortcuts(), onDevices: showWindow,
-      onOpenChat: id => openDesktopChat(id)
+      onOpenChat: (id,server) => openDesktopChat(id,server)
     });
     await probeDesktop();
     desktopProbeTimer = setInterval(() => { probeDesktop().catch(() => {}); }, 20_000);
