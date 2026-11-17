@@ -1,5 +1,7 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'own-windows.ps1')
+if (-not [MetisOwnWindows]::IsWorkspaceTitle('Metis') -or -not [MetisOwnWindows]::IsWorkspaceTitle('Metis — localhost:3000') -or [MetisOwnWindows]::IsWorkspaceTitle('Metis — Remote Client Device Settings') -or [MetisOwnWindows]::IsWorkspaceTitle('Other app')) { throw 'Workspace title classifier failed.' }
+Write-Output 'WINDOWS_WORKSPACE_TITLE_CLASSIFIER_OK'
 $expectedVersion = (Get-Content (Join-Path $PSScriptRoot '..\package.json') -Raw | ConvertFrom-Json).version
 if (-not $env:RUNNER_TEMP) { throw 'Installer smoke test is restricted to an isolated CI runner.' }
 $installer = Get-ChildItem (Join-Path $PSScriptRoot '..\dist') -Filter 'Metis-AI-Remote-Client-Setup.exe' | Select-Object -First 1
@@ -77,11 +79,11 @@ if($reopenedHandle -eq 0 -or $process.HasExited){
  Get-Content (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log') -Tail 40 -ErrorAction SilentlyContinue | Write-Output
  [MetisOwnWindows]::Describe([int]$process.Id) | Write-Output
  [MetisOwnWindows]::Describe([int]$second.Id) | Write-Output
- throw 'Launching the installed app again did not reopen its existing window.'
+ throw 'Launching the installed app again did not open a workspace in the existing process.'
 }
-# Chromium may recreate a frameless native HWND during a visibility/style change.
-# Source integration separately asserts the SAME BrowserWindow/WebContents and
-# authenticated connection; here enforce one visible workspace and the same PID.
+# Explicit app starts now open a new workspace; the previous last window stays
+# hidden. Source integration verifies independent windows and shared sessions.
+# Here enforce one visible workspace, a short-lived launcher and the same owner PID.
 if([MetisOwnWindows]::Count([int]$process.Id) -ne 1){throw 'Reopening created more than one visible workspace.'}
 if(!$second.WaitForExit(15000)){
  Get-Content (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log') -Tail 50 -ErrorAction SilentlyContinue | Write-Output

@@ -19,7 +19,7 @@ app.whenReady().then(async()=>{
  updater.emit("update-downloaded",{version:"9.0.0"});
  const shutdown=createUpdateShutdown({
   ready:()=>controller.ready,
-  drain:async()=>{const pid=child.pid;child.kill();await waitForProcessExit([pid]);await new Promise(resolve=>setImmediate(resolve));assert.ok(exited);},
+  drain:async()=>{const pid=child.pid,exitEvent=once(child,"exit");child.kill();await waitForProcessExit([pid]);await exitEvent;assert.ok(exited);},
   cleanup:()=>{cleaned=true;win.destroy();},
   install:()=>controller.install(),quit:()=>app.quit(),
   onError:error=>{console.error(error);app.exit(1);},
