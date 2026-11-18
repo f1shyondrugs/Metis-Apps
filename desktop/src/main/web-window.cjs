@@ -198,7 +198,7 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
       const contents = view?.webContents;
       if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
           !sameOrigin(event.senderFrame.url, server)) throw new Error('Access denied.');
-      return onDeviceState();
+      return onDeviceState(server);
     },
     'desktop:shortcut-capture': (event,value) => {
       const contents = view?.webContents;
