@@ -39,6 +39,11 @@ test("Linux hub:pair without keyring or X11 saves, resumes and unpairs a termina
   const paired = await handlers.get("hub:pair")(event, { server: "https://metis.example", token: "u_test" });
   assert.equal(paired.paired, true); assert.equal(paired.connection, "connecting");
   assert.equal(paired.credential, undefined);
+  assert.equal(paired.serverRows[0].status, "connecting");
+  assert.equal(paired.serverRows[0].host, "metis.example");
+  assert.doesNotMatch(JSON.stringify(paired.serverRows), /test-only-secret|test-device/);
+  assert.equal(vm.runInContext("publicState().serverRows", context), undefined);
+  await assert.rejects(handlers.get("hub:open-server")(event, "https://unknown.example"), /saved server/);
   assert.equal(enrollment.url, "https://metis.example/api/remote-clients/enroll");
   assert.equal(enrollment.body.capabilities.includes("desktop_gui"), false);
   assert.equal(enrollment.body.capabilities.includes("user_files"), true);

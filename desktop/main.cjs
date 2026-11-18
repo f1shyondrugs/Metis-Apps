@@ -161,6 +161,8 @@ let previousConnection = "offline";
 const updates = require('./src/main/app-updates.cjs').createUpdateState();
 const appUpdate = updates.value;
 let updateController;
+const updateWindow = require("./src/main/update-window.cjs").createUpdateWindow(BrowserWindow);
+let installingUpdate = false;
 let updateCheckTimer, updateInterval;
 const status = { connection: "offline", error: "", update: "", desktopAvailable: false, desktopReason: "Checking desktop permissions…", platform: process.platform };
 let desktopProbeTimer;
@@ -296,8 +298,14 @@ async function warnIfDesktopPermissionsMissing() {
   }
 }
 
+function hubState() {
+  const serverRows = require("./src/main/device-servers.cjs").deviceServerRows(
+    desktop?.getRecentServers() || [], config, status, os.hostname());
+  return { ...publicState(), serverRows };
+}
+
 function broadcast() {
-  window?.webContents.send("hub:status", publicState());
+  window?.webContents.send("hub:status", hubState());
   tray?.setToolTip(`${APP_NAME} — ${status.connection}`);
   updateTray();
 }
@@ -347,7 +355,9 @@ function updateTray() {
 }
 
 function showWindow() {
+  if (installingUpdate) { void updateWindow.show(); return; }
   if (!window) createWindow();
+  window.webContents.send("hub:status", hubState());
   window.show();
   window.focus();
 }
@@ -501,7 +511,7 @@ function registerIpc() {
         event.senderFrame.url !== pathToFileURL(path.join(__dirname, "index.html")).href) throw new Error("Access denied.");
     return handler(event, ...args);
   });
-  handle("hub:state", () => publicState());
+  handle("hub:state", () => hubState());
   handle("hub:restart-as-administrator", () => enableAdministratorClient());
   handle("hub:snapshot", () => fetchSnapshot());
   handle("hub:pair", async (_event, input) => {
@@ -555,7 +565,7 @@ function registerIpc() {
     status.error = "";
     await startRuntime();
     broadcast();
-    return publicState();
+    return hubState();
   });
   handle("hub:unpair", async () => {
     ++pairingEpoch;++runtimeEpoch;
@@ -573,9 +583,17 @@ function registerIpc() {
     status.connection = "offline";
     status.error = "";
     broadcast();
-    return publicState();
+    return hubState();
   });
-  handle("hub:open-server", () => showDesktop());
+  handle("hub:open-server", async (_event, origin) => {
+    if (installingUpdate) { await updateWindow.show(); return; }
+    if (origin === undefined) { await showDesktop(); return; }
+    const entry = hubState().serverRows.find(row => row.origin === origin);
+    if (!entry) throw Error("Select a saved server.");
+    if (!desktop) await showDesktop();
+    await desktop.openServer(entry.url);
+    await desktop.show();
+  });
   handle("hub:export", async () => {
     const snapshot = await fetchSnapshot();
     const result = await dialog.showSaveDialog(window, {
@@ -683,6 +701,7 @@ if(process.platform==="win32"){
  }
 }
   app.on("second-instance", (_event,_argv,_cwd,hint) => {
+    if (installingUpdate || updateWindow.active) { void updateWindow.show(); return; }
     // This untrusted hint changes presentation only, never permissions or UAC.
     if(getWindowsElevation()==="user"&&hint?.windowsElevation==="administrator"){
       status.error="The desktop app stays in Standard user mode. Enable the Administrator Remote Client here and confirm Windows UAC.";
@@ -692,17 +711,18 @@ if(process.platform==="win32"){
       await desktop.newWindow(id ? {serverId:id} : {});
     }).catch(error=>{status.error=error.message;broadcast();});
   });
-  app.on("activate", () => void showDesktop());
+  app.on("activate", () => { if (installingUpdate || updateWindow.active) void updateWindow.show(); else void showDesktop(); });
   let markDesktopReady;
   const desktopReady = new Promise(resolve => { markDesktopReady = resolve; });
   const activationListener = process.platform === "win32"
     ? require("./src/main/window-activation.cjs").listenForWindowActivation({
       directory: userDataDir,
-      activate: () => desktopReady.then(() => showDesktop()),
+      activate: () => installingUpdate || updateWindow.active ? updateWindow.show() : desktopReady.then(() => showDesktop()),
       onError: () => {}, // Native second-instance/tray activation remains available.
     }) : null;
   app.whenReady().then(async () => {
     app.setAppUserModelId(process.env.METIS_DESKTOP_TEST_DATA ? "ai.metis.remoteclient.test" : "ai.metis.remoteclient");
+    if (process.platform === "win32" && process.argv.includes("--updated")) void updateWindow.show("opening");
     try { config = loadConfig(); } catch (error) { status.error = error.message; }
     const actualElevation=getWindowsElevation();
     status.accessMismatch=process.platform==="win32"&&Boolean(config)&&actualElevation==="unknown";
@@ -753,7 +773,8 @@ if(process.platform==="win32"){
     tray = new Tray(trayImage());
     updateTray();
     void getAutostart();
-    await showDesktop();
+    try { await showDesktop(); }
+    finally { updateWindow.close(); }
     traceStartup("desktop-visible-"+desktop.win.isVisible());
     markDesktopReady();
     if(status.accessMismatch){showWindow();broadcast();}
@@ -770,6 +791,10 @@ if(process.platform==="win32"){
   const updateShutdown=require("./src/main/update-shutdown.cjs").createUpdateShutdown({
     ready:()=>Boolean(updateController?.ready),
     drain:async wantsInstall=>{
+      if(wantsInstall){
+        installingUpdate = true;
+        await updateWindow.show();
+      }
       const pids=[runtime?.pid,administratorHost.pid];
       const hadAdministrator=administratorHost.connected;
       quitting=true;++runtimeEpoch;++pairingEpoch;
@@ -785,8 +810,10 @@ if(process.platform==="win32"){
     install:()=>updateController.install(),
     quit:()=>app.quit(),
     onError:error=>{
-      quitting=false;updates.error({message:"Update installation could not finish. Retry Quit or export update diagnostics."});
+      installingUpdate=false;updateWindow.close();
+      quitting=false;updates.error({message:"Update installation could not finish. Quit and reopen Metis to retry."});
       status.update=appUpdate.message;broadcast();
+      dialog.showErrorBox(APP_NAME, appUpdate.message);
     },
   });
   app.on("before-quit",updateShutdown.beforeQuit);

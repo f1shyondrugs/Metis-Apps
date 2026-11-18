@@ -3,6 +3,7 @@ const fs=require("node:fs"),os=require("node:os"),path=require("node:path"),asse
 const {createUpdateState}=require("../src/main/app-updates.cjs");
 const {createUpdateController,waitForProcessExit}=require("../src/main/update-controller.cjs");
 const {createUpdateShutdown}=require("../src/main/update-shutdown.cjs");
+const {createUpdateWindow}=require("../src/main/update-window.cjs");
 const directory=process.env.METIS_UPDATE_TEST_DIR||fs.mkdtempSync(path.join(os.tmpdir(),"metis-update-native-"));
 app.setName("Metis isolated update test");app.setAppUserModelId("ai.metis.update.native.test");app.setPath("userData",directory);app.disableHardwareAcceleration();
 let child,installs=0,cleaned=false,exited=false;
@@ -15,16 +16,26 @@ app.whenReady().then(async()=>{trace("ready");
  child.on("exit",()=>{exited=true;});await once(child.stdout,"data");trace("child-ready");
  const win=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true}});
  await win.loadURL("data:text/html,<title>Isolated update test</title>");
+ const updateWindow=createUpdateWindow(BrowserWindow);
  const updater=new EventEmitter(),state=createUpdateState();
  updater.checkForUpdates=async()=>{};updater.downloadUpdate=async()=>{};
- updater.quitAndInstall=()=>{trace("installer-handoff");assert.ok(exited);assert.ok(cleaned);installs++;app.quit();};
+ updater.quitAndInstall=(silent,reopen)=>{trace("installer-handoff");assert.equal(silent,process.platform==="win32");assert.equal(reopen,true);assert.ok(updateWindow.active);assert.ok(exited);assert.ok(cleaned);installs++;app.quit();};
  const controller=createUpdateController({updater,state,version:"fixture",diagnosticsFile:path.join(directory,"diagnostics.json")});
  updater.emit("update-downloaded",{version:"9.0.0"});
  const shutdown=createUpdateShutdown({
   ready:()=>controller.ready,
   // Windows can retire the OS process before Node delivers ChildProcess.exit
   // during Electron's quit sequence. Verify the actual OS lifetime, not event timing.
-  drain:async()=>{trace("drain");const pid=child.pid;child.kill();await waitForProcessExit([pid]);assert.throws(()=>process.kill(pid,0),{code:"ESRCH"});exited=true;trace("child-stopped");},
+  drain:async()=>{
+    trace("drain");await updateWindow.show();
+    const splash=BrowserWindow.getAllWindows().find(window=>window.webContents.getURL().endsWith("/updating.html"));
+    assert.ok(splash?.isVisible());
+    assert.equal(splash.isResizable(),false);
+    assert.deepEqual(await splash.webContents.executeJavaScript('[document.querySelector("h1").textContent, !!document.querySelector("nav,footer,#progress"), typeof window.metis]'),["Updating Metis",false,"undefined"]);
+    await updateWindow.show();assert.equal(BrowserWindow.getAllWindows().filter(window=>window===splash).length,1);
+    const pid=child.pid;child.kill();await waitForProcessExit([pid]);assert.throws(()=>process.kill(pid,0),{code:"ESRCH"});exited=true;trace("child-stopped");
+    console.log("UPDATE_WINDOW_VISIBLE_DURING_HANDOFF");
+  },
   cleanup:()=>{trace("cleanup");cleaned=true;win.destroy();},
   install:()=>controller.install(),quit:()=>app.quit(),
   onError:error=>{console.error(error);app.exit(1);},

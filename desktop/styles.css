@@ -53,6 +53,17 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y
 #settings-view { width: 100%; flex: none; }
 .pair-view { min-height: calc(100vh - 64px); display: grid; place-items: center; padding: 32px 24px; }
 .pair-panel { width: min(100%, 450px); }
+.servers-view { width: min(100%, 1040px); margin: 0 auto; padding: 24px clamp(18px, 3vw, 32px) 4px; flex: none; }
+.servers-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.servers-heading h1 { margin: 0; font-size: 18px; letter-spacing: -.025em; }
+.servers-heading .text-button { min-height: 44px; }
+.server-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 10px; }
+.server-card { display: grid; gap: 5px; align-content: start; padding: 14px; min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); text-align: left; }
+.server-card:hover { background: var(--hover); }
+.server-card[aria-pressed="true"] { border-color: var(--focus); background: var(--hover); }
+.server-card strong, .server-card .subtle { overflow-wrap: anywhere; }
+.server-card .connection-status { margin-top: 3px; font-size: 12px; }
+main:has(.servers-view:not([hidden])) .pair-view { min-height: 0; place-items: start; width: min(100%, 1040px); margin-inline: auto; }
 .eyebrow { font-size: 11px; letter-spacing: .12em; font-weight: 700; color: var(--muted-text); margin: 0 0 10px; }
 h1 { font-size: clamp(25px, 3vw, 31px); line-height: 1.15; letter-spacing: -.045em; font-weight: 600; margin: 0 0 8px; }
 .subtle { color: var(--muted-text); font-size: 12px; line-height: 1.5; margin: 0; }

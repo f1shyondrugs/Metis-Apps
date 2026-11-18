@@ -1,5 +1,53 @@
 const byId = (id) => document.getElementById(id);
-const state = { paired: false, clientId: "", connection: "offline", client: null, audit: [], selectedLog: "", page: 1, view: "activity", loaded: false, fetching: false };
+const state = { paired: false, clientId: "", connection: "offline", client: null, audit: [], selectedLog: "", page: 1, view: "activity", loaded: false, fetching: false, serverRows: [], selectedOrigin: undefined };
+const serverStatuses = { online: "Online", offline: "Offline", connecting: "Connecting", error: "Connection error", paused: "Access paused", "not-paired": "Not paired" };
+const selectedServer = () => state.serverRows.find(row => row.origin === state.selectedOrigin);
+let paintedServers;
+function chooseServer(origin) {
+  state.selectedOrigin = origin;
+  byId("server").value = selectedServer()?.origin || "";
+  byId("token").value = "";
+  byId("pair-error").hidden = true;
+  renderView();
+  if (selectedServer()?.paired) void refresh();
+}
+
+function renderServers(settings) {
+  const grid = byId("server-grid");
+  const before = grid.contains(document.activeElement) ? document.activeElement.dataset.origin : null;
+  const entries = state.serverRows.map(row => ({
+    ...row, name: row.paired ? state.client?.name || row.deviceName || "This device" : "No device paired",
+  }));
+  const signature = JSON.stringify([entries, state.selectedOrigin, state.pairing]);
+  byId("servers-view").hidden = settings || entries.length === 0;
+  byId("add-server").disabled = Boolean(state.pairing);
+  byId("add-server").setAttribute("aria-pressed", String(state.selectedOrigin === null));
+  if (signature !== paintedServers) {
+    paintedServers = signature;
+    grid.replaceChildren();
+    let focus;
+    for (const row of entries) {
+      const card = node("button", "server-card");
+      card.type = "button";
+      card.disabled = Boolean(state.pairing);
+      card.dataset.origin = row.origin;
+      card.setAttribute("aria-pressed", String(row.origin === state.selectedOrigin));
+      card.setAttribute("aria-controls", row.paired && state.paired ? "hub-view" : "pair-view");
+      const indicator = node("span", "connection-status");
+      const dot = node("span", "status-dot " + row.status);
+      dot.setAttribute("aria-hidden", "true");
+      indicator.append(dot, node("span", "", serverStatuses[row.status] || "Unknown"));
+      card.append(node("strong", "", row.host), node("span", "subtle", row.name), indicator);
+      card.addEventListener("click", () => chooseServer(row.origin));
+      if (row.origin === before) focus = card;
+      grid.append(card);
+    }
+    focus?.focus({ preventScroll: true });
+  }
+  const status = selectedServer()?.status || (state.serverRows.length ? "not-paired" : state.connection);
+  byId("connection-label").textContent = serverStatuses[status] || "Unknown";
+  byId("connection-dot").className = "status-dot " + status;
+}
 
 function formatDate(value) {
   if (!value) return "Never";
@@ -24,8 +72,11 @@ function node(tag, className, value) {
 
 function renderView() {
   const settings = state.view === "settings";
-  byId("pair-view").hidden = state.paired || settings;
-  byId("hub-view").hidden = !state.paired || settings;
+  const showDevice = state.paired && (state.serverRows.length === 0 || selectedServer()?.paired);
+  byId("pair-view").hidden = showDevice || settings;
+  byId("hub-view").hidden = !showDevice || settings;
+  byId("pair-replaces").hidden = !state.paired || showDevice;
+  renderServers(settings);
   byId("settings-view").hidden = !settings;
   byId("paired-settings").hidden = !state.paired;
   if (settings) byId("open-settings").setAttribute("aria-current", "page");
@@ -34,8 +85,8 @@ function renderView() {
 function navigate(view) {
   state.view = view;
   renderView();
-  window.scrollTo(0, 0);
-  byId(view === "settings" ? "settings-title" : state.paired ? "device-name" : "server").focus({ preventScroll: true });
+  document.querySelector("main").scrollTop = 0;
+  byId(view === "settings" ? "settings-title" : byId("hub-view").hidden ? "server" : "device-name").focus({ preventScroll: true });
   if (view === "activity") void refresh();
 }
 function changeCommandPage(delta) {
@@ -46,15 +97,24 @@ function changeCommandPage(delta) {
 
 function setConnection(data) {
   const previousClientId = state.clientId;
+  const previousServer = state.server;
   Object.assign(state, data);
-  if (previousClientId !== state.clientId || !state.paired) {
-    state.audit = []; state.loaded = false; state.page = 1; state.selectedLog = "";
+  if (previousClientId !== state.clientId || previousServer !== state.server || !state.paired) {
+    state.client = null; state.audit = []; state.loaded = false; state.page = 1; state.selectedLog = "";
+    byId("device-name").textContent = "This device";
+    byId("device-meta").textContent = "";
+    byId("device-seen").textContent = "";
+    byId("sync-label").textContent = "Loading activity…";
+    byId("commands-loading").textContent = "Loading recent commands…";
+    renderCommands();
+  }
+  if (state.selectedOrigin === undefined || state.selectedOrigin !== null && !selectedServer()) {
+    state.selectedOrigin = state.serverRows.find(row => row.paired)?.origin ?? null;
   }
   if (data.appearance) window.MetisAppearance.apply(document.documentElement, data.appearance);
   renderView();
   byId("open-server").hidden = false;
-  byId("connection-label").textContent = state.connection.charAt(0).toUpperCase() + state.connection.slice(1);
-  byId("connection-dot").className = `status-dot ${state.connection}`;
+
   byId("update-label").textContent = data.update || "";
   if (typeof data.hideOverlayFromCapture === "boolean") renderCaptureSetting(data.hideOverlayFromCapture);
   if (data.cancelShortcut) renderCancelShortcut(data.cancelShortcut);
@@ -302,10 +362,12 @@ async function refreshDesktopPermissions(prompt = false) {
 }
 
 async function refresh() {
-  if (!state.paired || state.fetching || document.hidden || state.view === "settings") return;
+  if (!state.paired || byId("hub-view").hidden || state.fetching || document.hidden) return;
+  const server = state.server, clientId = state.clientId;
   state.fetching = true;
   try {
     const data = await window.metis.snapshot();
+    if (state.server !== server || state.clientId !== clientId || !state.paired) return;
     state.client = data.client?.id === state.clientId ? data.client : null;
     state.audit = Array.isArray(data.audit) ? data.audit.filter((entry) => entry.clientId === state.clientId) : [];
     state.loaded = true;
@@ -316,8 +378,10 @@ async function refresh() {
     byId("device-seen").textContent = state.client?.lastSeenAt ? `Last seen ${formatDate(state.client.lastSeenAt)}` : "";
     byId("sync-label").textContent = `Updated ${new Date().toLocaleTimeString("en")}`;
     void refreshDesktopPermissions();
+    renderServers(state.view === "settings");
     renderCommands();
   } catch (error) {
+    if (state.server !== server || state.clientId !== clientId) return;
     showHubError(error.message || "Could not load this device's activity");
     byId("sync-label").textContent = "Could not sync this device";
     if (!state.loaded) byId("commands-loading").textContent = "Command history unavailable.";
@@ -356,11 +420,15 @@ async function initialize() {
 byId("pair-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = byId("pair-button");
+  if (state.paired && !window.confirm("Connect this device to the entered server? This replaces the current device pairing.")) return;
   button.disabled = true;
+  state.pairing = true;
+  renderView();
   byId("pair-error").hidden = true;
   try {
     const data = await window.metis.pair({ server: byId("server").value, token: byId("token").value });
     byId("token").value = "";
+    state.selectedOrigin = undefined;
     setConnection(data);
     await refresh();
   } catch (error) {
@@ -368,6 +436,8 @@ byId("pair-form").addEventListener("submit", async (event) => {
     byId("pair-error").hidden = false;
   } finally {
     button.disabled = false;
+    state.pairing = false;
+    renderView();
   }
 });
 byId("restart-as-administrator").addEventListener("click",async()=>{
@@ -395,7 +465,13 @@ byId("commands-next").addEventListener("click", () => changeCommandPage(1));
 byId("open-settings").addEventListener("click", () => navigate("settings"));
 byId("close-settings").addEventListener("click", () => navigate("activity"));
 byId("open-activity").addEventListener("click", () => navigate("activity"));
-byId("open-server").addEventListener("click", () => void window.metis.openServer());
+byId("add-server").addEventListener("click", () => {
+  chooseServer(null);
+  byId("server").focus();
+});
+byId("open-server").addEventListener("click", () => {
+  void window.metis.openServer(selectedServer()?.origin).catch(error => showHubError(error.message || "Could not open this server."));
+});
 byId("autostart").addEventListener("change", async (event) => {
   event.target.disabled = true;
   try { event.target.checked = await window.metis.setAutostart(event.target.checked); }

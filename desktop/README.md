@@ -8,6 +8,10 @@ The main window opens Metis. **Metis → Change server** selects your server; **
 
 Launching a running app again from its shortcut, the taskbar context-menu app entry, Shift-click or middle-click opens another app window without starting another device connection or requesting UAC again. A normal left-click on a running taskbar icon keeps Windows' standard activation/thumbnail behavior; use New Window or a new launch for an additional window. A fixed, profile-scoped signal only asks the existing process to show its main window; it cannot carry commands or URLs. The elevated primary never writes or interprets that signal file. Starting the app from a fully stopped state may still require the Windows administrator confirmation for an admin-paired device. User-mode devices never elevate.
 
+**Device settings → Servers** shows the current device pairing and remembered Metis addresses. Select a card to show its device activity below, or pairing instructions if the server is not paired. Selecting a card does not change the actual pairing. Connecting a different device registration still requires a new pairing code and replaces the current pairing.
+
+When an update is ready, **Install downloaded update** or Quit hands off to the installer after the device processes exit. The frameless update window explains what is happening and a Windows installer-owned notice stays visible while the app files are replaced. Metis reopens automatically after a successful install. An all-users installation can still require Windows UAC.
+
 Signing into the website does not pair your computer. Pair separately in **Device settings** with the code from Metis Settings → Devices. Pairing does not sign into the website. Device permissions remain managed by the server and the operating system. Microphone approval is remembered per server on this device and shared by the main web window and assistant, including after an app restart. Camera access is a separate approval; operating-system permissions still apply.
 
 ## Desktop Assistant
