@@ -103,10 +103,10 @@ function createAnnotationOverlay({BrowserWindow,screen,ipcMain,getServer,appeara
   }
   const handlers={
     'overlay:state':(e)=>{const {id,r}=sender(e);r.ready=true;return state(id);},
-    'overlay:interact':(e,id)=>{const s=sender(e);return execute({operation:'interact',display_id:s.id,interactive_id:id});},
-    'overlay:remove':(e,id)=>{const s=sender(e);return execute({operation:'remove',display_id:s.id,ids:[id]});},
+    'overlay:interact':(e,id)=>{const s=sender(e);return execute({operation:'interact',display_id:s.id,interactive_id:id},s.r.server);},
+    'overlay:remove':(e,id)=>{const s=sender(e);return execute({operation:'remove',display_id:s.id,ids:[id]},s.r.server);},
     'overlay:clear':e=>{sender(e);return clearAll();},
-    'overlay:undo':e=>{const s=sender(e);return execute({operation:'undo',display_id:s.id});}
+    'overlay:undo':e=>{const s=sender(e);return execute({operation:'undo',display_id:s.id},s.r.server);}
   };
   for(const [channel,handler]of Object.entries(handlers))ipcMain.handle(channel,handler);
   const regions=(event,value)=>{

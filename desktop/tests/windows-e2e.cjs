@@ -8,8 +8,9 @@ fs.mkdirSync(path.join(__dirname,'../test-results'),{recursive:true});
 for(const suite of ['update-native','native-modules','native-pairings','recent-servers','multi-windows','smoke','unified','assistant','voice-permissions','annotation-overlay','onboarding','onboarding-reduced']){
  console.log('WINDOWS_SUITE_START',suite);
  const updateTestDir=suite==='update-native'?fs.mkdtempSync(path.join(os.tmpdir(),'metis-update-native-')):null;
- const result=spawnSync(require('electron'),[path.join(__dirname,suite+'.cjs')],{encoding:'utf8',timeout:90000,maxBuffer:16*1024*1024,env:{...process.env,...(updateTestDir?{METIS_UPDATE_TEST_DIR:updateTestDir}:{})}});
- if(updateTestDir&&!result.error)fs.rmSync(updateTestDir,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+ const pairingTestDir=suite==='native-pairings'?fs.mkdtempSync(path.join(os.tmpdir(),'metis-native-pairings-')):null;
+ const result=spawnSync(require('electron'),[path.join(__dirname,suite+'.cjs')],{encoding:'utf8',timeout:90000,maxBuffer:16*1024*1024,env:{...process.env,...(updateTestDir?{METIS_UPDATE_TEST_DIR:updateTestDir}:{}),...(pairingTestDir?{METIS_NATIVE_PAIRINGS_TEST_DIR:pairingTestDir}:{})}});
+ if(!result.error)for(const directory of [updateTestDir,pairingTestDir].filter(Boolean))fs.rmSync(directory,{recursive:true,force:true,maxRetries:10,retryDelay:100});
  const output=(result.stdout||'')+(result.stderr||'');
  fs.writeFileSync(path.join(__dirname,'../test-results/windows-'+suite+'.log'),output);
  process.stdout.write(output);

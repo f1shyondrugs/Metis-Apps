@@ -9,7 +9,7 @@ const http = require("node:http");
 const { once } = require("node:events");
 const { WebSocketServer } = require("ws");
 
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), "metis-native-pairings-"));
+const directory = process.env.METIS_NATIVE_PAIRINGS_TEST_DIR || fs.mkdtempSync(path.join(os.tmpdir(), "metis-native-pairings-"));
 process.env.METIS_DESKTOP_TEST_DATA = directory;
 const timeout = setTimeout(() => { console.error("NATIVE_PAIRINGS_TIMEOUT"); app.exit(1); }, 45000);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -173,6 +173,8 @@ async function run() {
   assert.equal((await wa.getView().webContents.executeJavaScript("metisApp.deviceState()")).paired, true);
   console.log("NATIVE_MULTI_ORIGIN_PAIRING_OK");
 }
-run().then(() => { clearTimeout(timeout); for (const f of fixtures) f.close(); app.quit(); },
-  error => { clearTimeout(timeout); console.error(error); for (const f of fixtures) f.close(); app.exit(1); });
-app.on("quit", () => fs.rmSync(directory, { recursive: true, force: true }));
+run().then(() => app.quit(),
+  error => { console.error(error); app.exit(1); });
+// Chromium still holds its profile open inside this event on Windows. The
+// runner owns profile cleanup after the Electron process has actually exited.
+app.once("quit", () => { clearTimeout(timeout); for (const f of fixtures) f.close(); });
