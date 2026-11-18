@@ -1,7 +1,8 @@
-const {app, Menu, ipcMain, dialog} = require('electron');
+const {app, Menu, ipcMain, dialog, net} = require('electron');
 const path = require('node:path');
 const {createRecentServers, buildJumpList} = require('./recent-servers.cjs');
 const {normalizeServer, sameOrigin} = require('../../policy.cjs');
+const {verifyMetisServer} = require('./server-verification.cjs');
 
 async function createDesktop(options = {}) {
   const recentServers = createRecentServers({configPath:path.join(app.getPath('userData'),'server.json'),initialServer:options.initialServer});
@@ -48,15 +49,14 @@ async function createDesktop(options = {}) {
       } catch(error) { console.warn('Metis Recent Servers Jump List:',error.message); }
     }
   }
-  async function newWindow({serverId,serverUrl,navigationUrl,remember=true}={}) {
+  async function newWindow({serverId,serverUrl,navigationUrl}={}) {
     if (serverId !== undefined) {
       serverUrl = recentServers.resolve(serverId);
       if (!serverUrl) return null;
     }
     if (serverUrl !== undefined) serverUrl=normalizeServer(serverUrl);
-    else serverUrl=focused()?.getState().server || (recentServers.list().length ? recentServers.getCurrent() : undefined);
+    else serverUrl=focused()?.getState().server || (recentServers.hasCurrent() ? recentServers.getCurrent() : undefined);
     if (navigationUrl && (!serverUrl || !sameOrigin(navigationUrl,serverUrl))) throw Error('Access denied.');
-    if (serverUrl && remember) recentServers.select(serverUrl);
     const captureOwner = {};
     const entry = await require('./web-window.cjs').createDesktopWindow({
       ...options,initialServer:serverUrl,recentServers,registerHandlers:register,
@@ -72,13 +72,16 @@ async function createDesktop(options = {}) {
     return entry;
   }
   const requested=options.initialServerId && recentServers.resolve(options.initialServerId);
-  const initial=await newWindow({serverUrl:requested || (recentServers.list().length?recentServers.getCurrent():options.initialServer),remember:Boolean(requested)});
+  const initial=await newWindow({serverUrl:requested || (recentServers.hasCurrent()?recentServers.getCurrent():options.initialServer)});
+  const recentReady = recentServers.verifyLegacy(url => verifyMetisServer(url, {
+    fetch: (address, options) => net.fetch(address, options), verifyPage: true
+  }), initial.getState().server).then(refreshMenus, error => console.warn('Could not check previous Metis servers:', error.code || 'storage error'));
   return {
     get win(){return (focused()||last).win;},
     get activeWindow(){return focused();},
     getView:()=>focused()?.getView(),getState:()=>focused()?.getState()||last.getState(),
     getFileDropState:()=>focused()?.getFileDropState(),getRecentServers:()=>recentServers.list(),
-    getWindows:()=>[...windows],newWindow,refreshMenus,
+    getWindows:()=>[...windows],newWindow,refreshMenus,recentReady,
     switchServer:id=>focused()?.switchServer(id)??false,
     settings:()=>focused()?.settings(),load:()=>focused()?.load(),initialLoad:initial.initialLoad,
     async openServer(serverUrl) {

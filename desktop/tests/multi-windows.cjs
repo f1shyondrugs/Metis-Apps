@@ -13,6 +13,7 @@ async function main(){
   const servers=[];
   for(const label of ['A','B']){
     const server=http.createServer((_req,res)=>{
+      if (require('./metis-server-fixture.cjs').replyMetisVersion(_req, res)) return;
       res.setHeader('content-type','text/html');
       res.end('<!doctype html><h1>'+label+'</h1><textarea id="draft"></textarea><script>window.localClicks=0;document.addEventListener("click",()=>localClicks++)</script>');
     });

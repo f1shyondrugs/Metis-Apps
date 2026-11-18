@@ -18,45 +18,65 @@ function createRecentServers({ configPath, initialServer } = {}) {
   try { saved = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch {}
   const legacy = canonicalOrNull(saved?.url);
   const initial = canonicalOrNull(initialServer);
-  let current = legacy || initial || DEFAULT_SERVER;
-  let history = [];
-  const seed = legacy || initial;
-  const candidates = [seed, ...(Array.isArray(saved?.recentServers) ? saved.recentServers : [])];
-  for (const candidate of candidates) {
-    const url = canonicalOrNull(candidate);
-    if (url && !history.includes(url)) history.push(url);
-    if (history.length === 10) break;
+  let current = legacy || initial;
+  const all = list => Array.isArray(list) ? list.slice(0, 10) : [];
+  const unique = values => [...new Set(values.map(canonicalOrNull).filter(Boolean))].slice(0, 10);
+  const hasProof = saved?.version === 2;
+  let history = hasProof ? unique(all(saved.recentServers)) : [];
+  let pending = unique(hasProof ? all(saved.pendingRecentServers) : [legacy || initial, ...all(saved?.recentServers)]);
+  let migration;
+
+  function write(next, recentServers, pendingRecentServers) {
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    // Same-directory rename is atomic; unique names isolate concurrent writers.
+    const temporary = configPath + '.' + randomUUID() + '.tmp';
+    let fd;
+    try {
+      fd = fs.openSync(temporary, 'wx', 0o600);
+      fs.writeFileSync(fd, JSON.stringify({ version: 2, url: next, recentServers, pendingRecentServers }, null, 2) + '\n');
+      fs.fsyncSync(fd);
+      fs.closeSync(fd);
+      fd = undefined;
+      fs.renameSync(temporary, configPath);
+    } catch (error) {
+      if (fd !== undefined) { try { fs.closeSync(fd); } catch {} }
+      try { fs.unlinkSync(temporary); } catch {}
+      throw error;
+    }
+    current = next;
+    history = recentServers;
+    pending = pendingRecentServers;
   }
 
   return {
-    getCurrent: () => current,
+    getCurrent: () => current || DEFAULT_SERVER,
+    hasCurrent: () => Boolean(current),
     list: () => history.map(url => ({ id: idFor(url), url, label: labelFor(url) })),
     resolve(id) {
       if (typeof id !== 'string' || !ID.test(id)) return null;
       return history.find(url => idFor(url) === id) || null;
     },
-    select(value) {
+    // Called only after both the Metis probe and the main-frame navigation pass.
+    rememberVerified(value) {
       const next = normalizeServer(value);
-      const recentServers = [next, ...history.filter(url => url !== next)].slice(0, 10);
-      fs.mkdirSync(path.dirname(configPath), { recursive: true });
-      // Same-directory rename is atomic; unique names isolate concurrent writers.
-      const temporary = configPath + '.' + randomUUID() + '.tmp';
-      let fd;
-      try {
-        fd = fs.openSync(temporary, 'wx', 0o600);
-        fs.writeFileSync(fd, JSON.stringify({ url: next, recentServers }, null, 2) + '\n');
-        fs.fsyncSync(fd);
-        fs.closeSync(fd);
-        fd = undefined;
-        fs.renameSync(temporary, configPath);
-      } catch (error) {
-        if (fd !== undefined) { try { fs.closeSync(fd); } catch {} }
-        try { fs.unlinkSync(temporary); } catch {}
-        throw error;
-      }
-      current = next;
-      history = recentServers;
+      if (next === current && next === history[0]) return next;
+      write(next, [next, ...history.filter(url => url !== next)].slice(0, 10), pending.filter(url => url !== next));
       return next;
+    },
+    verifyLegacy(verify, opening) {
+      const candidates = pending.filter(url => url !== opening);
+      if (migration || !candidates.length) return migration ?? Promise.resolve();
+      migration = (async () => {
+        const verified = [];
+        for (let i = 0; i < candidates.length; i += 3) {
+          const batch = candidates.slice(i, i + 3);
+          const checks = await Promise.allSettled(batch.map(url => Promise.resolve().then(() => verify(url))));
+          verified.push(...batch.filter((_, index) => checks[index].status === 'fulfilled'));
+        }
+        // A newer window may have opened while we probed. Never overwrite its selection.
+        write(current, unique([...history, ...verified]), pending.filter(url => !candidates.includes(url)));
+      })().finally(() => { migration = undefined; });
+      return migration;
     }
   };
 }

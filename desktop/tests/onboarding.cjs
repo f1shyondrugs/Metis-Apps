@@ -17,7 +17,7 @@ async function captureSeries(contents,name,count=28){
 const timeout=setTimeout(()=>{console.error("ONBOARDING_TIMEOUT");app.exit(1);},60000);
 async function run(){
  await app.whenReady();
- fixture=http.createServer((req,res)=>{if(req.url==="/")initialRequests++;res.setHeader("Content-Type","text/html");res.end(req.url==="/frame"?"<p>Untrusted child</p>":'<!doctype html><title>Fresh Metis fixture</title><h1>Fresh Metis server setup</h1><p id="setup">Create the first account</p><iframe src="/frame"></iframe>');});
+ fixture=http.createServer((req,res)=>{if(require('./metis-server-fixture.cjs').replyMetisVersion(req,res))return;if(req.url==="/")initialRequests++;res.setHeader("Content-Type","text/html");res.end(req.url==="/frame"?"<p>Untrusted child</p>":'<!doctype html><title>Fresh Metis fixture</title><h1>Fresh Metis server setup</h1><p id="setup">Create the first account</p><iframe src="/frame"></iframe>');});
  await new Promise(resolve=>fixture.listen(0,"127.0.0.1",resolve));const server="http://127.0.0.1:"+fixture.address().port+"/";
  let permissionCalls=0;
  desktop=await createDesktop({onDesktopPermissions:async()=>{permissionCalls++;return {available:false,reason:"Synthetic OS status"};}});

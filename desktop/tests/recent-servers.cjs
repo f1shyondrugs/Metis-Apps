@@ -20,8 +20,10 @@ const waitFor = async predicate => {
 async function main() {
   await app.whenReady();
   const fixtures = [];
-  for (const name of ['First', 'Second']) {
+  for (const name of ['First', 'Second', 'Unrelated site', 'Cloudflare error']) {
     const fixture = http.createServer((_request, response) => {
+      if (name !== 'Unrelated site' && require('./metis-server-fixture.cjs').replyMetisVersion(_request, response)) return;
+      if (name === 'Cloudflare error') response.statusCode = 503;
       response.setHeader('Content-Type', 'text/html');
       response.end('<!doctype html><title>' + name + '</title><h1>' + name + '</h1>');
     });
@@ -29,12 +31,20 @@ async function main() {
     fixtures.push(fixture);
   }
   const urls = fixtures.map(f => 'http://127.0.0.1:' + f.address().port + '/');
-  fs.writeFileSync(path.join(directory, 'server.json'), JSON.stringify({ url: urls[0] }));
+  fs.writeFileSync(path.join(directory, 'server.json'), JSON.stringify({ url: urls[0], recentServers: [urls[2], urls[3]] }));
   const api = require('../main.cjs');
   await waitFor(() => api.getDesktop()?.getState().mode === 'ready');
   const desktop = api.getDesktop();
-  assert.equal(desktop.getRecentServers().length, 1);
+  await desktop.recentReady;
+  assert.deepEqual(desktop.getRecentServers().map(e => e.url), [urls[0]]);
   const local = desktop.win.webContents;
+  for (const invalid of urls.slice(2)) {
+    assert.equal((await local.executeJavaScript('metisDesktop.connect(' + JSON.stringify(invalid) + ')')).ok, true);
+    await waitFor(() => desktop.getState().mode === 'error');
+    assert.deepEqual(desktop.getRecentServers().map(e => e.url), [urls[0]]);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'server.json'))).url, urls[0]);
+  }
+  console.log('RECENT_SERVERS_INVALID_AND_HTTP_ERROR_EXCLUDED_OK');
   assert.equal((await local.executeJavaScript('metisDesktop.connect(' + JSON.stringify(urls[1]) + ')')).ok, true);
   await waitFor(() => desktop.getState().mode === 'ready' && desktop.getState().server === urls[1]);
   assert.deepEqual(desktop.getRecentServers().map(e => e.url), [urls[1], urls[0]]);

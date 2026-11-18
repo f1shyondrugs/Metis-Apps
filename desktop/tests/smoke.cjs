@@ -23,6 +23,7 @@ async function waitFor(predicate) {
 async function main() {
   await app.whenReady();
   const fixture = http.createServer((_request, response) => {
+    if (require('./metis-server-fixture.cjs').replyMetisVersion(_request, response)) return;
     response.writeHead(200, { 'Content-Type': 'text/html', 'Set-Cookie': 'metis_fixture=session; Max-Age=3600; SameSite=Lax' });
     response.end(_request.url === '/frame' ? '<!doctype html><p>Frame</p>' : '<!doctype html><title>Metis fixture</title><h1 id="app">Metis test server</h1><iframe id="child" src="/frame"></iframe>');
   });

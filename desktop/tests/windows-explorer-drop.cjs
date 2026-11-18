@@ -16,7 +16,7 @@ async function main(){
  mouse=user.func('void mouse_event(uint32_t,uint32_t,uint32_t,uint32_t,uintptr_t)');
  cursor=user.func('bool SetCursorPos(int,int)');saved=Buffer.alloc(8);user.func('bool GetCursorPos(void *)')(saved);
  const http=require('node:http');
- const fixture=http.createServer((req,res)=>{res.setHeader('content-type','text/html');res.end('<h1>Own Metis drop fixture</h1><script>metisApp.onFilesDropped(p=>window.dropped=p)</script>');});
+ const fixture=http.createServer((req,res)=>{if(require('./metis-server-fixture.cjs').replyMetisVersion(req,res))return;res.setHeader('content-type','text/html');res.end('<h1>Own Metis drop fixture</h1><script>metisApp.onFilesDropped(p=>window.dropped=p)</script>');});
  await new Promise(resolve=>fixture.listen(0,'127.0.0.1',resolve));
  const desktop=await require(process.env.METIS_FILE_DROP_ARCHIVE?path.join(process.env.METIS_FILE_DROP_ARCHIVE,'src/main/web-window.cjs'):'../src/main/web-window.cjs').createDesktop({initialServer:'http://127.0.0.1:'+fixture.address().port});
  if(process.env.METIS_FILE_DROP_ARCHIVE){assert.ok(require.cache[require.resolve(path.join(process.env.METIS_FILE_DROP_ARCHIVE,'src/main/web-window.cjs'))]);console.log('ACTUAL_ASAR_WEB_WINDOW_MODULE_LOADED');}

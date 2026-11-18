@@ -23,6 +23,7 @@ async function main() {
   app.setName('Metis AI Remote Client');
   app.setVersion(require('../package.json').version);
   const fixture = http.createServer((request, response) => {
+    if (require('./metis-server-fixture.cjs').replyMetisVersion(request, response)) return;
     if (request.url === '/api/remote-clients/hub') {
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ client: { name: 'Fixture device' }, audit: [] }));
@@ -205,7 +206,7 @@ async function main() {
     const args=[...(process.platform==='linux'&&process.getuid?.()===0?['--no-sandbox']:[]),path.join(__dirname,'..')];
     const second=spawn(process.execPath,args,{env:{...process.env,METIS_DESKTOP_TEST_DATA:directory},stdio:'ignore'});
     const exited=new Promise((resolve,reject)=>{second.once('error',reject);second.once('exit',code=>code===0?resolve():reject(Error('Second launcher exit '+code)));});
-    await waitFor(()=>desktop.getWindows().length===survivors.length+1&&desktop.win.isVisible());
+    await waitFor(()=>desktop.getWindows().length===survivors.length+1&&desktop.win.isVisible()&&desktop.getState().mode==='ready'&&Boolean(desktop.getView()));
     await exited;
     assert.equal(api.getDesktop(),desktop);
     for(const saved of survivors)assert.equal(saved.entry.getView()?.webContents,saved.contents);

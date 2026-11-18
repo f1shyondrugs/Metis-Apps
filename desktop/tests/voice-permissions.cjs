@@ -12,7 +12,7 @@ const timeout=setTimeout(()=>app.exit(1),60000);
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function main(){
  await app.whenReady();
- const fixture=http.createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end('<!doctype html><html lang="en"><body>Microphone permission fixture</body></html>');});
+ const fixture=http.createServer((_req,res)=>{if(require('./metis-server-fixture.cjs').replyMetisVersion(_req,res))return;res.setHeader('content-type','text/html');res.end('<!doctype html><html lang="en"><body>Microphone permission fixture</body></html>');});
  fixture.listen(0,'127.0.0.1');await once(fixture,'listening');
  const origin='http://127.0.0.1:'+fixture.address().port;
  let prompts=0;const policy=createWebPermissionPolicy({file:path.join(app.getPath('userData'),'microphone.json'),prompt:async()=>{prompts++;return {response:1};}});

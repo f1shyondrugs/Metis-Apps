@@ -1,10 +1,11 @@
-const { app, BrowserWindow, WebContentsView, Menu, shell, dialog } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, shell, dialog, net } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const ROOT = path.join(__dirname, '../..');
 const { DEFAULT_SERVER, normalizeServer, sameOrigin, externalUrl } = require(path.join(ROOT, 'policy.cjs'));
 const APP_ID = process.env.METIS_DESKTOP_TEST_DATA ? 'ai.metis.desktop.test' : 'ai.metis.desktop';
 const { registerWebPermissions } = require('./web-permissions.cjs');
+const { verifyMetisServer } = require('./server-verification.cjs');
 
 const shellPath = path.join(ROOT, 'ui', 'index.html');
 const shellUrl = pathToFileURL(shellPath).href;
@@ -43,7 +44,7 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
     },
     onError: error => { dropState={available:false,error:String(error.message||'File drops are unavailable. Use Attach files.').slice(0,512)}; }
   });dropRegistered=true; } catch(error) { dropState={available:false,error:'File drops are unavailable. Use Attach files.'};if(process.env.METIS_DROP_TEST_ROOT)console.error('DROP_HELPER_SETUP_ERROR',error); }};
-  let generation = 0;
+  let generation = 0, probe;
   let state = { mode: serverConfigured ? 'loading' : 'welcome', server, message: '', firstRun:!serverConfigured };
   const update = (mode, message = '') => {
     state = { mode, server, message, firstRun:!serverConfigured };
@@ -52,6 +53,8 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
   const disposeView = () => {
     onShortcutCapture(false);
     generation++;
+    probe?.abort();
+    probe = undefined;
     if (!view) return;
     if (!win.isDestroyed()) win.contentView.removeChildView(view);
     if (!view.webContents.isDestroyed()) view.webContents.close();
@@ -68,6 +71,21 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
     disposeView();
     update('loading');
     const currentGeneration = generation;
+    const controller = new AbortController();
+    probe = controller;
+    const failure = (message) => {
+      if (generation !== currentGeneration || win.isDestroyed()) return;
+      view?.setVisible(false); update('error', message);
+    };
+    try {
+      await verifyMetisServer(server, { fetch: (url, options) => net.fetch(url, options), signal: controller.signal });
+    } catch {
+      failure('Could not verify this address as a Metis server. Check the address and your connection.');
+      return;
+    } finally {
+      if (probe === controller) probe = undefined;
+    }
+    if (generation !== currentGeneration || win.isDestroyed()) return;
     const remote = new WebContentsView({
       webPreferences: {
         partition: 'persist:metis-web',
@@ -93,9 +111,14 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
     contents.on('will-navigate', navigation);
     contents.on('will-redirect', navigation);
     contents.on('page-title-updated', (event) => { event.preventDefault(); win.setTitle('Metis — '+new URL(server).host); });
+    let responseOk = false, recorded = false;
+    contents.on('did-navigate', (_event, url, statusCode) => {
+      responseOk = sameOrigin(url, server) && statusCode >= 200 && statusCode < 300;
+    });
     contents.on('did-finish-load', () => {
       void (async () => {
         if (generation !== currentGeneration) return;
+        if (!responseOk) { failure('The Metis workspace did not load successfully. Try again or change the server address.'); return; }
         if (launcher) {
           // Frame style is immutable. Transfer the existing authorized WebContents
           // into the ordinary app host, without reloading login or touching data.
@@ -118,13 +141,14 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
           if (generation !== currentGeneration || next.isDestroyed()) return;
           if(wasVisible){if(wasFocused){next.show();next.focus();}else next.showInactive();}
         }
+        if (!recorded) {
+          recorded = true;
+          try { recentServers.rememberVerified(server); onChanged(); }
+          catch (error) { console.warn('Could not save verified Metis server:', error.code || 'storage error'); }
+        }
         remote.setVisible(true); update('ready'); refreshDropTarget(); if(win.isFocused())contents.focus();
       })().catch(() => failure('The workspace window could not be opened. Try again.'));
     });
-    const failure = (message) => {
-      if (generation !== currentGeneration || win.isDestroyed()) return;
-      remote.setVisible(false); update('error', message);
-    };
     contents.on('did-fail-load', (_event, code, _description, _url, mainFrame) => {
       if (mainFrame && code !== -3) failure('The server is unreachable. Check your connection or change the server address.');
     });
@@ -202,7 +226,7 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
   const unregister = registerHandlers(handlers, event => event.sender === win.webContents || event.sender === view?.webContents);
   function connect(value) {
     try {
-      server = recentServers.select(value); serverConfigured = true;
+      server = normalizeServer(value); serverConfigured = true;
       onChanged(); void load();
       return { ok: true };
     } catch (error) { return { ok: false, error: error.message }; }
