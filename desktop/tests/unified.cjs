@@ -94,6 +94,65 @@ async function main() {
   const state = await hub.webContents.executeJavaScript('metis.state()');
   assert.equal(state.paired, true); assert.equal(state.credential, undefined);
   console.log('SEPARATE_RENDERERS_AND_IPC_OK');
+  const owner = desktop.activeWindow, host = owner.win, workspaceUrl = remote.getURL();
+  const configFiles = ['config.json', 'server.json', 'preferences.json', 'client-context.json'];
+  const savedFiles = () => configFiles.map(name => {
+    const file = path.join(directory, name);
+    return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+  });
+  const beforeReplay = savedFiles(), runtimePid = api.getRuntimePid();
+  await remote.executeJavaScript(`document.body.insertAdjacentHTML('beforeend', '<input id="draft">'); document.querySelector('#draft').value = 'Unsent draft'; document.cookie = 'replay-account=fixture';`);
+  async function replayFromSettings() {
+    await remote.executeJavaScript('metisApp.openDeviceSettings()');
+    await hub.webContents.executeJavaScript(`document.querySelector('#open-settings').click(); document.querySelector('#replay-onboarding').click();`);
+    await waitFor(() => hub.getChildWindows().some(w => w.isVisible()));
+    const replay = hub.getChildWindows().find(w => w.isVisible());
+    const contents = replay.webContents;
+    const run = source => contents.executeJavaScript(source);
+    const waitForStep = async step => {
+      for (let i = 0; i < 120; i++) {
+        if (await run(`document.body.dataset.mode===${JSON.stringify(step)} && !document.querySelector('main').inert`)) return;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      throw Error('Replay did not reach the ' + step + ' step');
+    };
+    await waitForStep('welcome');
+    assert.equal(replay.getParentWindow(), hub);
+    assert.equal(await run('metisOnboardingReplay.state()'), owner.getState().server);
+    assert.deepEqual(await run('[typeof metis, typeof metisDesktop, typeof metisApp]'), ['undefined', 'undefined', 'undefined']);
+    return { replay, run, waitForStep };
+  }
+  const firstReplay = await replayFromSettings();
+  assert.equal(await firstReplay.run("document.querySelector('#heading').textContent"), 'Welcome to Metis');
+  const foreign = new BrowserWindow({show:false,webPreferences:{preload:path.join(__dirname,'../src/main/onboarding-replay-preload.cjs'),sandbox:true,contextIsolation:true}});
+  await foreign.loadURL(server+'/foreign-replay');
+  await assert.rejects(foreign.webContents.executeJavaScript('metisOnboardingReplay.state()'), /Access denied/);
+  await assert.rejects(foreign.webContents.executeJavaScript('metisOnboardingReplay.close()'), /Access denied/);
+  assert.equal(firstReplay.replay.isDestroyed(), false);
+  foreign.destroy();
+  await firstReplay.run("void setTimeout(() => document.querySelector('#exit-replay').click(), 20)");
+  await waitFor(() => firstReplay.replay.isDestroyed());
+  assert.equal(hub.isVisible(), false);
+  const {replay, run, waitForStep} = await replayFromSettings();
+  await run("document.querySelector('#begin').click()");
+  await waitForStep('settings');
+  assert.deepEqual(await run("(() => { const input = document.querySelector('#server'); return [input.readOnly, input.value]; })()"), [true, owner.getState().server]);
+  await run("document.querySelector('#form').requestSubmit()");
+  await waitForStep('loading');
+  assert.equal(await run("document.querySelector('#finish-replay').hidden || document.querySelector('#replay-actions').hidden"), false);
+  await run("void setTimeout(() => document.querySelector('#finish-replay').click(), 20)");
+  await waitFor(() => replay.isDestroyed());
+  assert.equal(owner.win, host);
+  assert.equal(owner.getView().webContents, remote);
+  assert.equal(remote.getURL(), workspaceUrl);
+  assert.equal(await remote.executeJavaScript("document.querySelector('#draft').value"), 'Unsent draft');
+  assert.match(await remote.executeJavaScript("document.cookie"), /replay-account=fixture/);
+  assert.deepEqual(savedFiles(), beforeReplay);
+  assert.equal(api.getRuntimePid(), runtimePid);
+  assert.equal(authentications, 1);
+  assert.equal(hub.isVisible(), false);
+  assert.equal(host.isVisible(), true);
+  console.log('NATIVE_ONBOARDING_REPLAY_PRESERVES_LIVE_WORKSPACE_OK');
   if(api.publicState().desktopAvailable){
   await waitFor(()=>overlayCapability);
   socket.send(JSON.stringify({type:'request',requestId:'overlay-status',action:'desktop_overlay',params:{operation:'status'}}));

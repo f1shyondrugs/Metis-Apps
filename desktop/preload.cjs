@@ -2,6 +2,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("metis", {
+  replayOnboarding: () => ipcRenderer.invoke("hub:replay-onboarding"),
   state: () => ipcRenderer.invoke("hub:state"),
   restartAsAdministrator: () => ipcRenderer.invoke("hub:restart-as-administrator"),
   snapshot: () => ipcRenderer.invoke("hub:snapshot"),

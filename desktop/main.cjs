@@ -20,6 +20,8 @@ const { normalizeServer, sameOrigin } = require("./policy.cjs");
 const { serverArgument } = require("./src/main/recent-servers.cjs");
 let desktop;
 let desktopOpening;
+let deviceSettingsWorkspace;
+let onboardingReplay;
 let assistant;
 async function showDesktop() {
   if (!desktop || desktop.win.isDestroyed()) {
@@ -354,12 +356,52 @@ function updateTray() {
   ]));
 }
 
-function showWindow() {
+function showWindow(workspace) {
+  deviceSettingsWorkspace = desktop?.getWindows().includes(workspace) ? workspace : desktop?.activeWindow;
   if (installingUpdate) { void updateWindow.show(); return; }
   if (!window) createWindow();
   window.webContents.send("hub:status", hubState());
   window.show();
   window.focus();
+}
+
+async function showOnboardingReplay() {
+  if (quitting || installingUpdate) throw new Error("Metis is closing.");
+  if (onboardingReplay) { onboardingReplay.window.focus(); return; }
+  const workspace = deviceSettingsWorkspace && !deviceSettingsWorkspace.win.isDestroyed()
+    ? deviceSettingsWorkspace : desktop?.activeWindow;
+  if (!workspace) throw new Error("No desktop window is available.");
+  // A separate local shell keeps the live workspace WebContents mounted.
+  const settings = window;
+  const replay = new BrowserWindow({
+    parent: settings, modal: true, show: false, frame: false,
+    width: 860, height: 660, minWidth: 390, minHeight: 540,
+    title: "Metis — Replay onboarding", backgroundColor: "#000000",
+    webPreferences: {
+      preload: path.join(__dirname, "src", "main", "onboarding-replay-preload.cjs"),
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
+    },
+  });
+  const page = path.join(__dirname, "ui", "index.html");
+  onboardingReplay = { window: replay, url: pathToFileURL(page).href, server: workspace.getState().server };
+  replay.webContents.on("will-navigate", event => event.preventDefault());
+  replay.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  if (process.platform !== "darwin") replay.setMenu(null);
+  let loaded = false;
+  replay.on("closed", () => {
+    onboardingReplay = undefined;
+    if (!loaded || quitting || installingUpdate || workspace.win.isDestroyed()) return;
+    if (!settings.isDestroyed()) settings.hide();
+    if (workspace.win.isMinimized()) workspace.win.restore();
+    workspace.win.show();
+    workspace.win.focus();
+    workspace.getView()?.webContents.focus();
+  });
+  try { await replay.loadFile(page); }
+  catch (error) { if (!replay.isDestroyed()) replay.destroy(); throw error; }
+  if (replay.isDestroyed()) return;
+  loaded = true;
+  replay.show();
 }
 
 function createWindow() {
@@ -511,6 +553,21 @@ function registerIpc() {
         event.senderFrame.url !== pathToFileURL(path.join(__dirname, "index.html")).href) throw new Error("Access denied.");
     return handler(event, ...args);
   });
+  function ownsReplay(event) {
+    const contents = onboardingReplay?.window.webContents;
+    return Boolean(contents && event.sender === contents && event.senderFrame === contents.mainFrame &&
+      event.senderFrame.url === onboardingReplay.url);
+  }
+  ipcMain.handle("onboarding-replay:state", event => {
+    if (!ownsReplay(event)) throw new Error("Access denied.");
+    return onboardingReplay.server;
+  });
+  ipcMain.handle("onboarding-replay:close", event => {
+    if (!ownsReplay(event)) throw new Error("Access denied.");
+    const replay = onboardingReplay.window;
+    setImmediate(() => { if (!replay.isDestroyed()) replay.close(); });
+  });
+  handle("hub:replay-onboarding", showOnboardingReplay);
   handle("hub:state", () => hubState());
   handle("hub:restart-as-administrator", () => enableAdministratorClient());
   handle("hub:snapshot", () => fetchSnapshot());

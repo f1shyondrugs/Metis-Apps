@@ -486,6 +486,14 @@ byId("check-updates").addEventListener("click", async () => {
   catch (error) { byId("update-label").textContent = ""; showHubError(error.message || "Could not check for updates."); }
   finally { button.disabled = false; }
 });
+byId("replay-onboarding").addEventListener("click", async () => {
+  const button = byId("replay-onboarding"), error = byId("replay-error");
+  button.disabled = true;
+  error.hidden = true;
+  try { await window.metis.replayOnboarding(); }
+  catch { error.textContent = "Could not open onboarding. Try again."; error.hidden = false; }
+  finally { button.disabled = false; }
+});
 byId("unpair").addEventListener("click", async () => {
   if (!window.confirm("Disconnect this device from Metis? You can pair it again from Settings → Devices.")) return;
   try {

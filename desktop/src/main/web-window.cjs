@@ -168,7 +168,7 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
       const contents = view?.webContents;
       if (!contents || event.sender !== contents || event.senderFrame !== contents.mainFrame ||
           !sameOrigin(event.senderFrame.url, server)) throw new Error('Access denied.');
-      onDevices();
+      onDevices(api);
     },
     'desktop:device-state': event => {
       const contents = view?.webContents;
@@ -231,7 +231,7 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
     { label: 'Metis', submenu: [
       { id: 'metis-new-window', label: 'New Window', accelerator: 'CmdOrCtrl+N', click: onNewWindow },
       { label: 'Home', accelerator: 'CmdOrCtrl+Home', click: () => { void load(); } },
-      { id: 'metis-device-settings', label: 'Open Remote Client Device Settings', accelerator: onDeviceState().assistant?.shortcuts?.deviceSettings || 'CmdOrCtrl+Shift+D', registerAccelerator: !onDeviceState().assistant?.hotkeyAvailable, click: onDevices },
+      { id: 'metis-device-settings', label: 'Open Remote Client Device Settings', accelerator: onDeviceState().assistant?.shortcuts?.deviceSettings || 'CmdOrCtrl+Shift+D', registerAccelerator: !onDeviceState().assistant?.hotkeyAvailable, click: () => onDevices(api) },
       { id: 'metis-recent-servers', label: 'Recent Servers', submenu: recentMenu() },
       { label: 'Change server…', accelerator: 'CmdOrCtrl+,', click: settings },
       { label: 'Open in browser', click: () => openExternal(server) },

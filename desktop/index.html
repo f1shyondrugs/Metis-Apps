@@ -94,6 +94,10 @@
         <div id="desktop-permissions" class="device-summary permissions-card" hidden><div><strong id="desktop-permissions-title">Desktop permissions</strong><p id="desktop-permissions-summary" class="subtle">Checking Screen Recording and Accessibility…</p></div><div class="heading-actions"><button id="check-permissions" class="text-button" type="button">Check</button><button id="grant-permissions" class="permission-grant" type="button" hidden>Grant</button></div></div>
       </section>
       <section id="paired-settings" class="settings-section" aria-labelledby="connection-title" hidden><h2 id="connection-title">Connection</h2><div class="setting-row"><div><strong>Disconnect this device</strong><p class="subtle">Reconnect later with a new pairing code.</p></div><button id="unpair" class="text-button destructive" type="button">Disconnect</button></div></section>
+      <section class="settings-section" aria-label="Onboarding">
+        <div class="setting-row"><div><strong>Desktop setup</strong><p class="subtle">Revisit the welcome and setup screens without changing your workspace or device settings.</p></div><button id="replay-onboarding" class="text-button" type="button">Replay onboarding</button></div>
+        <p id="replay-error" class="error-text" role="alert" hidden></p>
+      </section>
     </section>
   </main>
   <script src="./renderer.js"></script>
