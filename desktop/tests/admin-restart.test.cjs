@@ -44,6 +44,23 @@ test('late notifications and events from an older pairing cannot use a newer ser
  assert.equal(f.sends.slice(2).filter(message=>message.error==='Device session changed.').length,3);
  f.control.shutdown();
 });
+test('Administrator pairing hosts keep their pipe sessions and grants separate', async () => {
+ const a=fixture(),b=fixture();
+ assert.equal(a.calls+b.calls,0);
+ await Promise.all([a.control.ensure(),b.control.ensure()]);
+ const options={capabilities:{},onEvent:async()=>true,showNotification:async()=>true};
+ const ra=attachAdminRuntime(a.control,{...options,config:{server:'https://a.example',permissionMode:'admin',credential:'a'}});
+ const rb=attachAdminRuntime(b.control,{...options,config:{server:'https://b.example',permissionMode:'admin',credential:'b'}});
+ const [firstA]=a.sends,[firstB]=b.sends;
+ assert.notEqual(firstA.session,firstB.session);
+ assert.equal(firstA.config.credential,'a');
+ assert.equal(firstB.config.credential,'b');
+ ra.stop();a.control.shutdown();
+ assert.equal(b.sends.length,1);
+ rb.cancelComputerUse();
+ assert.deepEqual(b.sends[1],{type:'cancel',session:firstB.session});
+ b.control.shutdown();
+});
 test('private frames are bounded and survive fragmented Unicode or coalesced reads',()=>{
  const output=[],receive=decoder(value=>output.push(value));
  const bytes=Buffer.concat([encode({type:'event',text:'Ä👋'}),encode({type:'stop'})]);

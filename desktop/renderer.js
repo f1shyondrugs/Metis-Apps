@@ -3,20 +3,22 @@ const state = { paired: false, clientId: "", connection: "offline", client: null
 const serverStatuses = { online: "Online", offline: "Offline", connecting: "Connecting", error: "Connection error", paused: "Access paused", "not-paired": "Not paired" };
 const selectedServer = () => state.serverRows.find(row => row.origin === state.selectedOrigin);
 let paintedServers;
+let activityGeneration = 0;
 function chooseServer(origin) {
   state.selectedOrigin = origin;
   byId("server").value = selectedServer()?.origin || "";
   byId("token").value = "";
   byId("pair-error").hidden = true;
-  renderView();
-  if (selectedServer()?.paired) void refresh();
+  byId("connection-error").hidden = true;
+  setConnection({});
+  void refresh();
 }
 
 function renderServers(settings) {
   const grid = byId("server-grid");
   const before = grid.contains(document.activeElement) ? document.activeElement.dataset.origin : null;
   const entries = state.serverRows.map(row => ({
-    ...row, name: row.paired ? state.client?.name || row.deviceName || "This device" : "No device paired",
+    ...row, name: row.paired ? (row.origin === state.selectedOrigin && state.client?.name) || row.deviceName || "This device" : "No device paired",
   }));
   const signature = JSON.stringify([entries, state.selectedOrigin, state.pairing]);
   byId("servers-view").hidden = settings || entries.length === 0;
@@ -32,7 +34,7 @@ function renderServers(settings) {
       card.disabled = Boolean(state.pairing);
       card.dataset.origin = row.origin;
       card.setAttribute("aria-pressed", String(row.origin === state.selectedOrigin));
-      card.setAttribute("aria-controls", row.paired && state.paired ? "hub-view" : "pair-view");
+      card.setAttribute("aria-controls", row.paired ? "hub-view" : "pair-view");
       const indicator = node("span", "connection-status");
       const dot = node("span", "status-dot " + row.status);
       dot.setAttribute("aria-hidden", "true");
@@ -72,13 +74,13 @@ function node(tag, className, value) {
 
 function renderView() {
   const settings = state.view === "settings";
-  const showDevice = state.paired && (state.serverRows.length === 0 || selectedServer()?.paired);
+  const showDevice = state.paired;
   byId("pair-view").hidden = showDevice || settings;
   byId("hub-view").hidden = !showDevice || settings;
-  byId("pair-replaces").hidden = !state.paired || showDevice;
   renderServers(settings);
   byId("settings-view").hidden = !settings;
   byId("paired-settings").hidden = !state.paired;
+  byId("disconnect-target").textContent = selectedServer()?.paired ? `Disconnect from ${selectedServer().host}` : "Disconnect this device";
   if (settings) byId("open-settings").setAttribute("aria-current", "page");
   else byId("open-settings").removeAttribute("aria-current");
 }
@@ -98,18 +100,37 @@ function changeCommandPage(delta) {
 function setConnection(data) {
   const previousClientId = state.clientId;
   const previousServer = state.server;
-  Object.assign(state, data);
-  if (previousClientId !== state.clientId || previousServer !== state.server || !state.paired) {
+  const previousPaused = state.accessMismatch;
+  const previousRevision = state.pairingRevision;
+  if (data.serverRows) state.serverRows = data.serverRows;
+  if (!state.pairing && data.preferredOrigin && state.serverRows.some(row => row.origin === data.preferredOrigin)) {
+    state.selectedOrigin = data.preferredOrigin;
+    byId("server").value = data.preferredOrigin;
+    byId("token").value = "";
+  }
+  if (state.selectedOrigin === undefined || state.selectedOrigin !== null && !selectedServer()) {
+    state.selectedOrigin = state.serverRows.find(row => row.paired)?.origin ?? null;
+  }
+  const row = selectedServer();
+  const { paired, clientId, server, connection, permissionMode, accessMismatch, deviceElevation, error, ...global } = data;
+  Object.assign(state, global, {
+    paired: Boolean(row?.paired), clientId: row?.clientId || "", server: row?.origin || "",
+    connection: row?.connection || "offline", permissionMode: row?.permissionMode,
+    accessMismatch: Boolean(row?.accessMismatch), deviceElevation: row?.deviceElevation, pairingRevision: row?.revision,
+  });
+  const canSync = Boolean(state.clientId && !state.accessMismatch);
+  byId("refresh").disabled = byId("export").disabled = !canSync;
+  if (previousClientId !== state.clientId || previousServer !== state.server || previousPaused !== state.accessMismatch || previousRevision !== state.pairingRevision) {
+    activityGeneration++;
+    state.fetching = false;
     state.client = null; state.audit = []; state.loaded = false; state.page = 1; state.selectedLog = "";
     byId("device-name").textContent = "This device";
     byId("device-meta").textContent = "";
     byId("device-seen").textContent = "";
-    byId("sync-label").textContent = "Loading activity…";
-    byId("commands-loading").textContent = "Loading recent commands…";
+    byId("sync-label").textContent = canSync ? "Loading activity…" : "Activity unavailable";
+    byId("commands-loading").textContent = canSync ? "Loading recent commands…" : "Command history unavailable.";
+    showHubError("");
     renderCommands();
-  }
-  if (state.selectedOrigin === undefined || state.selectedOrigin !== null && !selectedServer()) {
-    state.selectedOrigin = state.serverRows.find(row => row.paired)?.origin ?? null;
   }
   if (data.appearance) window.MetisAppearance.apply(document.documentElement, data.appearance);
   renderView();
@@ -122,12 +143,12 @@ function setConnection(data) {
   const access=byId("windows-access"),restart=byId("restart-as-administrator");
   access.hidden=state.platform!=="win32";
   byId("windows-access-title").textContent=state.windowsElevation==="user"?"Desktop app: Standard user":"Desktop app: "+(state.windowsElevation==="administrator"?"Administrator":"Unverified");
-  byId("windows-access-detail").textContent=state.accessMismatch?"Device access is paused because Windows process rights could not be verified.":state.permissionMode==="user"?"This device is paired with User access. Administrator access requires a new Administrator pairing code and Windows UAC approval.":"The Remote Client runs separately in the background. Administrator access requires Windows UAC approval; the desktop app stays in Standard user mode.";
+  byId("windows-access-detail").textContent=state.accessMismatch?"Device access is paused. Select this pairing and approve Windows access if requested.":state.permissionMode==="user"?"This device is paired with User access. Administrator access requires a new Administrator pairing code and Windows UAC approval.":"The Remote Client runs separately in the background. Administrator access requires Windows UAC approval; the desktop app stays in Standard user mode.";
   if(state.deviceElevation)byId("windows-access-detail").textContent+=" Remote Client process: "+(state.deviceElevation==="administrator"?"Administrator.":"Standard user.");
-  restart.hidden=state.platform!=="win32"||state.windowsElevation!=="user"||state.deviceElevation==="administrator";
-  if (data.error && state.paired) showHubError(data.error);
-  if (data.error && !state.paired) {
-    byId("pair-error").textContent = data.error;
+  restart.hidden=state.platform!=="win32"||state.windowsElevation!=="user"||state.permissionMode!=="admin"||!state.accessMismatch;
+  if (row?.error && state.paired) showHubError(row.error);
+  if (error && !state.paired && !data.serverRows?.some(row => row.paired)) {
+    byId("pair-error").textContent = error;
     byId("pair-error").hidden = false;
   }
 }
@@ -362,12 +383,12 @@ async function refreshDesktopPermissions(prompt = false) {
 }
 
 async function refresh() {
-  if (!state.paired || byId("hub-view").hidden || state.fetching || document.hidden) return;
-  const server = state.server, clientId = state.clientId;
+  if (!state.clientId || state.accessMismatch || byId("hub-view").hidden || state.fetching || document.hidden) return;
+  const server = state.server, generation = activityGeneration;
   state.fetching = true;
   try {
-    const data = await window.metis.snapshot();
-    if (state.server !== server || state.clientId !== clientId || !state.paired) return;
+    const data = await window.metis.snapshot(server);
+    if (generation !== activityGeneration) return;
     state.client = data.client?.id === state.clientId ? data.client : null;
     state.audit = Array.isArray(data.audit) ? data.audit.filter((entry) => entry.clientId === state.clientId) : [];
     state.loaded = true;
@@ -381,12 +402,12 @@ async function refresh() {
     renderServers(state.view === "settings");
     renderCommands();
   } catch (error) {
-    if (state.server !== server || state.clientId !== clientId) return;
+    if (generation !== activityGeneration) return;
     showHubError(error.message || "Could not load this device's activity");
     byId("sync-label").textContent = "Could not sync this device";
     if (!state.loaded) byId("commands-loading").textContent = "Command history unavailable.";
   } finally {
-    state.fetching = false;
+    if (generation === activityGeneration) state.fetching = false;
   }
 }
 
@@ -398,9 +419,9 @@ async function initialize() {
   }
   // Listen before any slow native/network lookup, so reconnects remain visible.
   window.metis.onStatus((data) => {
-    const wasPaired = state.paired;
+    const before = activityGeneration;
     setConnection(data);
-    if (!wasPaired && state.paired) void refresh();
+    if (before !== activityGeneration) void refresh();
   });
   const loginInput = byId("autostart");
   loginInput.disabled = true;
@@ -420,7 +441,12 @@ async function initialize() {
 byId("pair-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = byId("pair-button");
-  if (state.paired && !window.confirm("Connect this device to the entered server? This replaces the current device pairing.")) return;
+  let existing;
+  try {
+    const origin = new URL(byId("server").value).origin;
+    existing = state.serverRows.find(row => row.origin === origin && row.paired);
+  } catch { /* The native handler validates malformed addresses. */ }
+  if (existing && !window.confirm(`Replace the pairing for ${existing.host}? Other servers stay connected.`)) return;
   button.disabled = true;
   state.pairing = true;
   renderView();
@@ -428,7 +454,7 @@ byId("pair-form").addEventListener("submit", async (event) => {
   try {
     const data = await window.metis.pair({ server: byId("server").value, token: byId("token").value });
     byId("token").value = "";
-    state.selectedOrigin = undefined;
+    state.selectedOrigin = data.pairedOrigin;
     setConnection(data);
     await refresh();
   } catch (error) {
@@ -442,7 +468,7 @@ byId("pair-form").addEventListener("submit", async (event) => {
 });
 byId("restart-as-administrator").addEventListener("click",async()=>{
  const button=byId("restart-as-administrator");button.disabled=true;button.setAttribute("aria-busy","true");button.textContent="Waiting for Windows…";
- try{setConnection(await window.metis.restartAsAdministrator());}
+ try{setConnection(await window.metis.restartAsAdministrator(state.selectedOrigin));}
  catch(error){
   const message=error.message||"Windows approval was not confirmed. The desktop app and saved pairing are unchanged.";
   if(state.paired)showHubError(message);else{byId("pair-error").textContent=message;byId("pair-error").hidden=false;}
@@ -454,7 +480,7 @@ byId("check-permissions")?.addEventListener("click", () => void refreshDesktopPe
 byId("grant-permissions")?.addEventListener("click", () => void refreshDesktopPermissions(true));
 byId("banner-grant")?.addEventListener("click", () => void refreshDesktopPermissions(true));
 byId("export").addEventListener("click", async () => {
-  try { await window.metis.exportAudit(); }
+  try { await window.metis.exportAudit(state.selectedOrigin); }
   catch (error) { showHubError(error.message || "Could not export logs"); }
 });
 function resetCommandFilters() { state.page = 1; state.selectedLog = ""; renderCommands(); }
@@ -495,13 +521,24 @@ byId("replay-onboarding").addEventListener("click", async () => {
   finally { button.disabled = false; }
 });
 byId("unpair").addEventListener("click", async () => {
-  if (!window.confirm("Disconnect this device from Metis? You can pair it again from Settings → Devices.")) return;
+  const target = selectedServer();
+  if (!target?.paired || !window.confirm(`Disconnect this device from ${target.host}? Other servers stay connected.`)) return;
+  const errorLabel = byId("connection-error");
+  errorLabel.hidden = true;
+  const button = byId("unpair");
+  button.disabled = true;
   try {
-    const data = await window.metis.unpair();
-    state.client = null; state.audit = []; state.loaded = false; state.page = 1; state.selectedLog = ""; state.view = "activity";
+    const data = await window.metis.unpair(target.origin);
+    state.selectedOrigin = null;
+    state.view = "activity";
     setConnection(data);
+    byId("server").value = "";
+    byId("token").value = "";
     byId("server").focus();
-  } catch (error) { showHubError(error.message || "Could not disconnect this device."); }
+  } catch (error) {
+    errorLabel.textContent = error.message || "Could not disconnect this device.";
+    errorLabel.hidden = false;
+  } finally { button.disabled = false; }
 });
 setInterval(() => void refresh(), 5_000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) void refresh(); });

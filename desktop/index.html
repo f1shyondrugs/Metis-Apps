@@ -43,7 +43,7 @@
           <label for="token">Pairing code</label>
           <input id="token" type="text" placeholder="Paste the code from Metis" required autocomplete="off" spellcheck="false">
           <p id="pair-note" class="field-note">The code expires after 15 minutes.</p>
-          <p id="pair-replaces" class="field-note" hidden>This will replace the current device pairing.</p>
+          <p class="field-note">Connecting a new server keeps other pairings active.</p>
           <button id="pair-button" class="primary-button" type="submit">Connect device</button>
         </form>
         <p id="pair-error" class="error-text" role="alert" hidden></p>
@@ -93,7 +93,7 @@
         </div>
         <div id="desktop-permissions" class="device-summary permissions-card" hidden><div><strong id="desktop-permissions-title">Desktop permissions</strong><p id="desktop-permissions-summary" class="subtle">Checking Screen Recording and Accessibility…</p></div><div class="heading-actions"><button id="check-permissions" class="text-button" type="button">Check</button><button id="grant-permissions" class="permission-grant" type="button" hidden>Grant</button></div></div>
       </section>
-      <section id="paired-settings" class="settings-section" aria-labelledby="connection-title" hidden><h2 id="connection-title">Connection</h2><div class="setting-row"><div><strong>Disconnect this device</strong><p class="subtle">Reconnect later with a new pairing code.</p></div><button id="unpair" class="text-button destructive" type="button">Disconnect</button></div></section>
+      <section id="paired-settings" class="settings-section" aria-labelledby="connection-title" hidden><h2 id="connection-title">Connection</h2><div class="setting-row"><div><strong id="disconnect-target">Disconnect this device</strong><p class="subtle">Reconnect later with a new pairing code.</p></div><button id="unpair" class="text-button destructive" type="button">Disconnect</button></div><p id="connection-error" class="error-text" role="alert" hidden></p></section>
       <section class="settings-section" aria-label="Onboarding">
         <div class="setting-row"><div><strong>Desktop setup</strong><p class="subtle">Revisit the welcome and setup screens without changing your workspace or device settings.</p></div><button id="replay-onboarding" class="text-button" type="button">Replay onboarding</button></div>
         <p id="replay-error" class="error-text" role="alert" hidden></p>

@@ -21,15 +21,13 @@ function bootstrap() {
         if(message.type==='start'){
           const config=message.config,session=message.session;
           if(!/^[a-f0-9]{32}$/.test(session||''))throw Error('Invalid device session.');
-          const {normalizeServer}=require('../../policy.cjs');
-          if(!config||config.permissionMode!=='admin'||typeof config.clientId!=='string'||!config.clientId||
-            typeof config.credential!=='string'||!config.credential||config.credential.length>8192||
-            normalizeServer(config.server).replace(/\/+$/,'')!==config.server)
+          const validated = require('../main/device-pairing.cjs').validatePairing(config);
+          if (validated.permissionMode !== 'admin' || validated.server !== config.server)
             throw Error('Invalid Administrator pairing.');
           host?.stop();activeSession=session;
           for(const [id,pending]of requests){clearTimeout(pending.timer);pending.reject(Error('Device session changed.'));requests.delete(id);}
           host=require('./runtime.cjs').startDeviceHost({
-            utilityProcess,config,
+            utilityProcess,config:validated,
             configPath:path.join(process.env.METIS_DESKTOP_TEST_DATA || path.join(app.getPath('appData'),'MetisAI','RemoteClient'),'config.json'),
             capabilities:message.capabilities, presentationOwned:true,
             receiveNotification:value=>request('notification-message',value,session),

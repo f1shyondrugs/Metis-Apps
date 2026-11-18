@@ -21,16 +21,17 @@ test("Linux hub:pair without keyring or X11 saves, resumes and unpairs a termina
     safeStorage: { isEncryptionAvailable: () => false, getSelectedStorageBackend: () => "basic_text" },
     screen: { getAllDisplays: () => [] },
   };
+  const fetcher = async (url, init) => { enrollment = { url, body: JSON.parse(init.body) };
+    return { ok: true, json: async () => ({ client: { id: "test-device", permissionMode: "user" }, credential: "test-only-secret" }) }; };
   const context = vm.createContext({
     require: name => name === "electron" ? electron : name === "electron-updater" ? { autoUpdater: {} }
       : name === "./computer-use-overlay.cjs" ? { createComputerUseOverlay() {} }
+      : name === "./src/main/device-pairing.cjs" ? { ...require(name), enroll: (input, device, options) => require(name).enroll(input, device, { ...options, fetcher }) }
       : name === "./credential-store.cjs" ? { createCredentialStore: options => require("./credential-store.cjs").createCredentialStore({ ...options, platform: "linux" }) } : require(name),
     process: { platform: "linux", env: { WAYLAND_DISPLAY: "wayland-1", XDG_SESSION_TYPE: "wayland" } },
-    module: { exports: {} }, __dirname: path.dirname(fileURLToPath(new URL("../desktop/main.cjs", import.meta.url))), Buffer, URL, AbortSignal, console,
-    fetch: async (url, init) => { enrollment = { url, body: JSON.parse(init.body) };
-      return { ok: true, json: async () => ({ client: { id: "test-device", permissionMode: "user" }, credential: "test-only-secret" }) }; },
+    module: { exports: {} }, __dirname: path.dirname(fileURLToPath(new URL("../desktop/main.cjs", import.meta.url))), Buffer, URL, AbortController, AbortSignal, console,
   });
-  vm.runInContext(main + '\nstartRuntime = async () => { globalThis.runtimeConfig = config; }; registerIpc();', context);
+  vm.runInContext(main + '\nstartRuntime = async session => { globalThis.runtimeConfig = session.config; session.status.connection = "connecting"; }; registerIpc();', context);
   const webContents = { mainFrame: { url: new URL("../desktop/index.html", import.meta.url).href }, send() {} };
   context.testWindow = { webContents };
   vm.runInContext("window = testWindow;", context);
@@ -41,16 +42,16 @@ test("Linux hub:pair without keyring or X11 saves, resumes and unpairs a termina
   assert.equal(paired.credential, undefined);
   assert.equal(paired.serverRows[0].status, "connecting");
   assert.equal(paired.serverRows[0].host, "metis.example");
-  assert.doesNotMatch(JSON.stringify(paired.serverRows), /test-only-secret|test-device/);
+  assert.doesNotMatch(JSON.stringify(paired.serverRows), /test-only-secret/);
   assert.equal(vm.runInContext("publicState().serverRows", context), undefined);
   await assert.rejects(handlers.get("hub:open-server")(event, "https://unknown.example"), /saved server/);
   assert.equal(enrollment.url, "https://metis.example/api/remote-clients/enroll");
   assert.equal(enrollment.body.capabilities.includes("desktop_gui"), false);
   assert.equal(enrollment.body.capabilities.includes("user_files"), true);
   assert.equal(context.runtimeConfig.credential, "test-only-secret");
-  vm.runInContext("config = loadConfig();", context);
+  vm.runInContext("sessions.clear(); for (const [origin, entry] of credentialStore.load()) sessions.set(origin, makeSession(origin, entry));", context);
   assert.equal(handlers.get("hub:state")(event).paired, true);
-  assert.equal(vm.runInContext("config.credential", context), "test-only-secret");
-  assert.equal((await handlers.get("hub:unpair")(event)).paired, false);
-  assert.equal(fs.existsSync(path.join(paths.userData, "config.json")), false);
+  assert.equal(vm.runInContext("primarySession().config.credential", context), "test-only-secret");
+  assert.equal((await handlers.get("hub:unpair")(event, "https://metis.example")).paired, false);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(paths.userData, "config.json"), "utf8")).pairings, []);
 });

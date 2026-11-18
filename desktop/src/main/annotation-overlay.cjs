@@ -38,8 +38,7 @@ function createAnnotationOverlay({BrowserWindow,screen,ipcMain,getServer,appeara
   }
   function tick(){if(destroyed)return;for(const id of windows.keys())publish(id);if(!store.hasItems()){clearInterval(timer);timer=null;} }
   function startTimer(){if(!timer){timer=setInterval(tick,25);timer.unref?.();}}
-  async function ensure(id){
-    const server=normalizeServer(getServer());
+  async function ensure(id, server){
     let r=windows.get(id);
     if(r&&(!sameOrigin(r.server,server)||r.win.isDestroyed()||!r.ready)){if(!r.win.isDestroyed())r.win.destroy();windows.delete(id);r=null;}
     if(r)return r;
@@ -78,16 +77,21 @@ function createAnnotationOverlay({BrowserWindow,screen,ipcMain,getServer,appeara
     store.reset();
     for(const id of windows.keys())publish(id);onChange();return publicState();
   }
-  async function execute(params){
+  async function execute(params, server = getServer()){
     const requestedEpoch=epoch;
+    server = normalizeServer(server);
     const run=async()=>{
       if(requestedEpoch!==epoch)throw Error('Overlay request cancelled by clear');
       if(destroyed)throw Error('Overlay closed');sync();
       if(params.operation==='status')return publicState();
+      for (const [id, record] of windows) {
+        if (!sameOrigin(record.server, server)) { record.win.destroy(); windows.delete(id); }
+      }
       const previous=store.checkpoint();
       try{
         store.apply(params);
-        for(const s of store.states())if(s.items.length)await ensure(s.display.id);
+        for(const s of store.states())if(s.items.length)await ensure(s.display.id, server);
+        if (requestedEpoch !== epoch) throw Error('Overlay request cancelled by clear');
         for(const id of windows.keys())publish(id);
         if(params.operation==='interact'&&params.interactive_id){
           const r=windows.get(String(params.display_id));r.win.setFocusable(true);r.win.show();r.win.focus();r.win.webContents.focus();

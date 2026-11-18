@@ -21,10 +21,10 @@ function fixture(t, platform = "linux") {
 }
 for (const available of [false, true]) test("Linux persists pairing without a keyring, availability=" + available, t => {
   const f = fixture(t); f.state.available = available;
-  assert.equal(f.store.load(), null);
+  assert.equal(f.store.load().size, 0);
   f.store.save(pairing);
-  assert.deepEqual(createCredentialStore({ file: f.file, safeStorage: f.safeStorage, platform: "linux" }).load(), pairing);
-  assert.equal(JSON.parse(fs.readFileSync(f.file)).encryptedCredential, undefined);
+  assert.deepEqual(createCredentialStore({ file: f.file, safeStorage: f.safeStorage, platform: "linux" }).load().get(pairing.server).config, pairing);
+  assert.equal(JSON.parse(fs.readFileSync(f.file)).pairings[0].encryptedCredential, undefined);
   if (process.platform !== "win32") {
     assert.equal(fs.statSync(f.file).mode & 0o777, 0o600);
     assert.equal(fs.statSync(path.dirname(f.file)).mode & 0o777, 0o700);
@@ -34,31 +34,31 @@ for (const available of [false, true]) test("Linux persists pairing without a ke
 test("available Linux keyring encrypts and decrypts pairing", t => {
   const f = fixture(t); f.state.available = true; f.state.backend = "gnome_libsecret";
   f.store.save(pairing);
-  const saved = JSON.parse(fs.readFileSync(f.file));
+  const saved = JSON.parse(fs.readFileSync(f.file)).pairings[0];
   assert.equal(saved.credential, undefined);
   assert.ok(saved.encryptedCredential);
-  assert.deepEqual(f.store.load(), pairing);
+  assert.deepEqual(f.store.load().get(pairing.server).config, pairing);
 });
 test("Linux file pairing migrates to OS encryption after the keyring becomes available", t => {
   const f = fixture(t); f.store.save(pairing);
   f.state.available = true; f.state.backend = "kwallet6";
-  assert.deepEqual(f.store.load(), pairing);
-  const saved = JSON.parse(fs.readFileSync(f.file));
+  assert.deepEqual(f.store.load().get(pairing.server).config, pairing);
+  const saved = JSON.parse(fs.readFileSync(f.file)).pairings[0];
   assert.equal(saved.credential, undefined);
-  assert.deepEqual(f.store.load(), pairing);
+  assert.deepEqual(f.store.load().get(pairing.server).config, pairing);
 });
 test("existing Linux basic_text encrypted pairing remains readable", t => {
   const f = fixture(t); f.state.available = true;
   fs.mkdirSync(path.dirname(f.file));
   fs.writeFileSync(f.file, JSON.stringify({ ...pairing, credential: undefined,
     encryptedCredential: Buffer.from("encrypted:" + pairing.credential).toString("base64") }));
-  assert.deepEqual(f.store.load(), pairing);
+  assert.deepEqual(f.store.load().get(pairing.server).config, pairing);
 });
 test("existing encrypted pairing is preserved when its keyring is unavailable", t => {
   const f = fixture(t); f.state.available = true; f.state.backend = "gnome_libsecret";
   f.store.save(pairing); const before = fs.readFileSync(f.file, "utf8");
   f.state.available = false;
-  assert.throws(() => f.store.load(), /original|keyring.*unavailable/);
+  assert.match(f.store.load().get(pairing.server).error, /unlock/);
   assert.equal(fs.readFileSync(f.file, "utf8"), before);
 });
 test("overwrite and load tighten existing permissive Linux storage", t => {
@@ -70,8 +70,8 @@ test("overwrite and load tighten existing permissive Linux storage", t => {
     assert.equal(fs.statSync(path.dirname(f.file)).mode & 0o777, 0o700);
   }
   f.store.save({ ...pairing, credential: "replacement", permissionMode: "admin" });
-  assert.equal(f.store.load().credential, "replacement");
-  assert.equal(f.store.load().permissionMode, "admin");
+  assert.equal(f.store.load().get(pairing.server).config.credential, "replacement");
+  assert.equal(f.store.load().get(pairing.server).config.permissionMode, "admin");
 });
 for (const platform of ["win32", "darwin"]) {
   test(platform + " continues to require OS encryption", t => {
@@ -79,9 +79,31 @@ for (const platform of ["win32", "darwin"]) {
     assert.throws(() => f.store.save(pairing), /OS credential storage/);
     assert.equal(fs.existsSync(f.file), false);
     f.state.available = true; f.state.backend = "os";
-    f.store.save(pairing); assert.deepEqual(f.store.load(), pairing);
+    f.store.save(pairing); assert.deepEqual(f.store.load().get(pairing.server).config, pairing);
   });
 }
+test("a locked record does not block another origin, and targeted removal survives reload", t => {
+  const f = fixture(t);
+  f.state.available = true; f.state.backend = "gnome_libsecret";
+  f.store.save(pairing);
+  f.state.available = false;
+  const other = { ...pairing, server: "https://metis.example:8443", credential: "distinct" };
+  f.store.save(other);
+  const loaded = f.store.load();
+  assert.match(loaded.get(pairing.server).error, /unlock/);
+  assert.deepEqual(loaded.get(other.server).config, other);
+  f.store.remove(other.server);
+  f.state.available = true;
+  assert.deepEqual([...f.store.load()], [[pairing.server, { config: pairing }]]);
+});
+
+test("malformed legacy mode is never inferred as elevated", t => {
+  const f = fixture(t);
+  fs.mkdirSync(path.dirname(f.file));
+  fs.writeFileSync(f.file, JSON.stringify({ ...pairing, permissionMode: undefined }));
+  assert.match(f.store.load().get(pairing.server).error, /validate/);
+});
+
 test("failed encryption preserves the previous pairing", t => {
   const f = fixture(t); f.store.save(pairing);
   const before = fs.readFileSync(f.file, "utf8");
@@ -92,8 +114,10 @@ test("failed encryption preserves the previous pairing", t => {
 });
 test("missing and foreign plaintext credentials are rejected", t => {
   const f = fixture(t); fs.mkdirSync(path.dirname(f.file)); fs.writeFileSync(f.file, "{}");
-  assert.throws(() => f.store.load(), /missing/);
+  assert.throws(() => f.store.load(), /Unrecognized/);
+  assert.throws(() => f.store.save(pairing), /Unrecognized/);
+  fs.unlinkSync(f.file);
   f.store.save(pairing);
   const mac = createCredentialStore({ file: f.file, safeStorage: f.safeStorage, platform: "darwin" });
-  assert.throws(() => mac.load(), /unsupported/);
+  assert.match(mac.load().get(pairing.server).error, /validate/);
 });

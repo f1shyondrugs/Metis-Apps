@@ -1,26 +1,28 @@
 const { normalizeServer } = require("../../policy.cjs");
 
-function deviceServerRows(recent, config, status, hostname) {
+function deviceServerRows(recent, sessions, hostname) {
   const rows = new Map();
-  let pairedOrigin;
-  try { if (config?.server) pairedOrigin = new URL(normalizeServer(config.server)).origin; } catch { /* No valid pairing. */ }
-  function append(value) {
+  const history = new Map();
+  for (const entry of recent.slice(0, 10)) {
     try {
-      const url = normalizeServer(value);
-      const { origin, host } = new URL(url);
-      if (rows.has(origin)) return;
-      const paired = origin === pairedOrigin;
-      const connection = status.accessMismatch ? "paused" :
-        ["online", "connecting", "offline", "error"].includes(status.connection) ? status.connection : "offline";
-      rows.set(origin, { origin, url, host, paired,
-        deviceName: paired ? hostname : "", status: paired ? connection : "not-paired" });
+      const url = normalizeServer(entry.url);
+      const { origin } = new URL(url);
+      if (!history.has(origin)) history.set(origin, url);
     } catch { /* Invalid history entries never become actions. */ }
   }
-  // Keep the actual paired server visible even after its history entry ages out.
-  if (pairedOrigin) append(recent.find(entry => {
-    try { return new URL(entry.url).origin === pairedOrigin; } catch { return false; }
-  })?.url || pairedOrigin);
-  for (const entry of recent.slice(0, 10)) append(entry.url);
+  for (const [origin, session] of sessions) {
+    const { host } = new URL(origin);
+    const { config, status } = session;
+    rows.set(origin, { origin, url: history.get(origin) || origin, host, paired: true,
+      deviceName: hostname, status: status.accessMismatch ? "paused" : status.connection,
+      connection: status.connection, accessMismatch: Boolean(status.accessMismatch), revision: session.revision,
+      error: status.error || "", clientId: config?.clientId || "",
+      permissionMode: config?.permissionMode || null, deviceElevation: status.deviceElevation || null });
+  }
+  for (const [origin, url] of history) {
+    if (!rows.has(origin)) rows.set(origin, { origin, url, host: new URL(origin).host,
+      paired: false, deviceName: "", status: "not-paired" });
+  }
   return [...rows.values()];
 }
 

@@ -17,6 +17,7 @@
     "test": "npm run prepare:client && node --test ../tests/*.test.mjs tests/policy.test.cjs tests/recent-servers.test.cjs tests/server-verification.test.cjs tests/client-context.test.cjs tests/reopen.test.cjs tests/admin-restart.test.cjs tests/device-elevation.test.cjs tests/file-drop.test.cjs tests/assistant-toggle.test.cjs tests/assistant-regions.test.cjs tests/assistant-preload.test.cjs tests/assistant-shortcuts.test.cjs tests/web-permissions.test.cjs tests/overlay-scene.test.cjs tests/annotation-pointer.test.cjs tests/update-controller.test.cjs tests/device-servers.test.cjs",
     "check": "node scripts/check.cjs",
     "test:e2e": "electron tests/update-native.cjs && electron tests/native-modules.cjs && electron tests/recent-servers.cjs && electron tests/multi-windows.cjs && electron tests/smoke.cjs && electron tests/unified.cjs && electron tests/assistant.cjs && electron tests/voice-permissions.cjs && electron tests/annotation-overlay.cjs && electron tests/onboarding.cjs && electron tests/onboarding-reduced.cjs",
+    "test:e2e:pairings": "npm run prepare:client && electron tests/native-pairings.cjs",
     "generate:icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {

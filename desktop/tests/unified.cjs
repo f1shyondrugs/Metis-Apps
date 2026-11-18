@@ -26,7 +26,7 @@ async function main() {
     if (require('./metis-server-fixture.cjs').replyMetisVersion(request, response)) return;
     if (request.url === '/api/remote-clients/hub') {
       response.setHeader('content-type', 'application/json');
-      response.end(JSON.stringify({ client: { name: 'Fixture device' }, audit: [] }));
+      response.end(JSON.stringify({ client: { id: 'fixture-device', name: 'Fixture device' }, audit: [] }));
     } else if(request.url === '/desktop-overlay') {
       response.setHeader('content-type','text/html');response.end('<!doctype html><script>window.scenes=[];metisOverlay.onState(s=>scenes.push(s));metisOverlay.state().then(s=>scenes.push(s));</script>');
     } else {

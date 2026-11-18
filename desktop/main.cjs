@@ -16,7 +16,9 @@ const { pathToFileURL } = require("node:url");
 
 const APP_NAME = "Metis";
 const { createDesktop } = require("./src/main/web-window.cjs");
-const { normalizeServer, sameOrigin } = require("./policy.cjs");
+const { DEFAULT_SERVER } = require("./policy.cjs");
+const { pairingOrigin, enroll, fetchPairingSnapshot } = require("./src/main/device-pairing.cjs");
+const { createAdminController, attachAdminRuntime } = require("./src/device/admin-controller.cjs");
 const { serverArgument } = require("./src/main/recent-servers.cjs");
 let desktop;
 let desktopOpening;
@@ -25,7 +27,7 @@ let onboardingReplay;
 let assistant;
 async function showDesktop() {
   if (!desktop || desktop.win.isDestroyed()) {
-    desktopOpening ||= createDesktop({ initialServer: config?.server, initialServerId: serverArgument(process.argv), onDevices: showWindow, onDeviceState: publicState, onAssistant: () => assistant?.open(), onShortcutsChange: setDesktopShortcuts, onShortcutCapture: value => assistant?.pauseShortcuts(value), onCaptureHidden: setOverlayCaptureHidden, onAutostart: setAutostart, onCheckUpdates: checkUpdates, onDesktopPermissions: async () => {await desktopPermissionStatus(true);await probeDesktop();return publicState();}, shouldHide: () => !quitting && (!desktop || desktop.getWindows().length <= 1) })
+    desktopOpening ||= createDesktop({ initialServer: primarySession()?.config?.server, initialServerId: serverArgument(process.argv), onDevices: showWindow, onDeviceState: publicState, onAssistant: () => assistant?.open(), onShortcutsChange: setDesktopShortcuts, onShortcutCapture: value => assistant?.pauseShortcuts(value), onCaptureHidden: setOverlayCaptureHidden, onAutostart: setAutostart, onCheckUpdates: checkUpdates, onDesktopPermissions: async () => {await desktopPermissionStatus(true);await probeDesktop();return { desktopAvailable: status.desktopAvailable, desktopReason: status.desktopReason, platform: process.platform };}, shouldHide: () => !quitting && (!desktop || desktop.getWindows().length <= 1) })
       .then(value => { desktop = value; return value; }).finally(() => { desktopOpening = null; });
     await desktopOpening;
   }
@@ -86,19 +88,32 @@ async function isElevated() {
  if(value==="unknown")throw Error("Windows administrator status could not be verified.");
  return value==="administrator";
 }
-const administratorHost=require("./src/device/admin-controller.cjs").createAdminController({
- developmentEntry:app.isPackaged?undefined:path.join(__dirname,"bootstrap.cjs"),
- createChannel:options=>require("./src/device/windows-channel.cjs").createChannel(options),
- launch:async args=>Number(await runPowerShell(`$child = Start-Process -FilePath ${psQuote(process.execPath)} -ArgumentList ${psQuote(args.map(arg=>'"'+arg+'"').join(" "))} -Verb RunAs -PassThru; $child.Id`,120000)),
- onClosed:error=>{if(config?.permissionMode==="admin"){status.deviceElevation=null;status.connection="error";status.error=error.message;broadcast();}}
-});
-async function enableAdministratorClient() {
- if(process.platform!=="win32")throw Error("Administrator device access is available on Windows only.");
- if(getWindowsElevation()!=="user")throw Error("Open the desktop app normally before connecting its background Administrator Remote Client.");
- const selected=config;
- await administratorHost.ensure();
- if(config===selected&&config?.permissionMode==="admin"&&!quitting)await startRuntime();
- return publicState();
+function newAdministratorHost(session) {
+  return createAdminController({
+    developmentEntry: app.isPackaged ? undefined : path.join(__dirname, "bootstrap.cjs"),
+    createChannel: options => require("./src/device/windows-channel.cjs").createChannel(options),
+    launch: async args => Number(await runPowerShell(`$child = Start-Process -FilePath ${psQuote(process.execPath)} -ArgumentList ${psQuote(args.map(arg=>'"'+arg+'"').join(" "))} -Verb RunAs -PassThru; $child.Id`,120000)),
+    onClosed: error => {
+      if (sessions.get(session.origin) !== session || quitting) return;
+      stopRuntime(session);
+      Object.assign(session.status, { deviceElevation: null, connection: "error", accessMismatch: true, error: error.message });
+      broadcast();
+    },
+  });
+}
+
+async function enableAdministratorClient(origin) {
+  const session = requireSession(origin);
+  if (process.platform !== "win32" || getWindowsElevation() !== "user" || session.config?.permissionMode !== "admin")
+    throw Error("Select a saved Administrator pairing to approve Windows access.");
+  if (session.admin?.connected && session.runtime) return hubState();
+  session.admin ||= newAdministratorHost(session);
+  await session.admin.ensure();
+  if (!session.admin.connected) throw Error("Administrator Remote Client disconnected.");
+  if (quitting || sessions.get(origin) !== session) throw Error("This pairing has changed.");
+  session.status.accessMismatch = false;
+  if (!session.runtime) await startOrReport(session);
+  return hubState();
 }
 
 function getAutostart() {
@@ -150,16 +165,27 @@ traceStartup("profile-configured");
 if(process.env.METIS_DESKTOP_TEST_DATA)traceStartup("profile-id-"+require("node:crypto").createHash("sha256").update(path.resolve(userDataDir).toLowerCase()).digest("hex").slice(0,12));
 let window;
 let tray;
-let runtime;
-let runtimeEpoch=0;
-let pairingEpoch=0;
+const sessions = new Map();
+const pendingPairings = new Map();
+let sessionRevision = 0;
+let inputOwner;
+let captureOwner;
+let annotationOwner;
+let annotationRequests = 0;
+const primarySession = () => sessions.values().next().value;
+function sessionFor(server) {
+  try { return sessions.get(pairingOrigin(server)); } catch { return undefined; }
+}
+function requireSession(origin) {
+  const session = sessions.get(origin);
+  if (!session) throw Error("Select a paired server.");
+  return session;
+}
 let computerUseOverlay;
 let annotationOverlay;
 let overlayPreferences;
 let computerUseCursorTimer;
-let config;
 let quitting = false;
-let previousConnection = "offline";
 const updates = require('./src/main/app-updates.cjs').createUpdateState();
 const appUpdate = updates.value;
 let updateController;
@@ -180,7 +206,7 @@ async function probeDesktop() {
       status.desktopReason = result.reason || "";
     }
   } catch (error) { status.desktopAvailable = false; status.desktopReason = error.stderr?.trim() || error.message; }
-  runtime?.setCapabilities({ desktopAvailable: status.desktopAvailable, overlayAnnotations: Boolean(annotationOverlay && status.desktopAvailable), nativeNotifications: screen.getAllDisplays().length > 0 && Notification.isSupported() });
+  for (const session of sessions.values()) session.runtime?.setCapabilities(runtimeCapabilities());
   broadcast();
 }
 
@@ -189,8 +215,25 @@ function configPath() {
 }
 
 const credentialStore = createCredentialStore({ file: configPath(), safeStorage });
-function loadConfig() { return credentialStore.load(); }
-function saveConfig(next) { credentialStore.save(next); }
+function makeSession(origin, { config, error }) {
+  const mismatch = process.platform === "win32" && getWindowsElevation() !== "user";
+  const approval = process.platform === "win32" && config?.permissionMode === "admin";
+  return { origin, config, revision: ++sessionRevision, epoch: 0, status: {
+    connection: error ? "error" : "offline", accessMismatch: mismatch || approval,
+    error: error || (mismatch ? "Windows process rights could not be verified. Device access is paused." : ""),
+  } };
+}
+
+function originDataPath(origin) {
+  const key = require("node:crypto").createHash("sha256").update(origin).digest("hex");
+  const directory = path.join(userDataDir, "device-connections", key);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  return path.join(directory, "config.json");
+}
+
+function runtimeCapabilities() {
+  return { desktopAvailable: status.desktopAvailable, overlayAnnotations: Boolean(annotationOverlay && status.desktopAvailable), nativeNotifications: screen.getAllDisplays().length > 0 && Notification.isSupported() };
+}
 
 function setDesktopShortcuts(value) {
   const next = require("./assistant-shortcuts.cjs").normalize(value, overlayPreferences.getCancelShortcut());
@@ -221,11 +264,14 @@ function setOverlayCaptureHidden(value) {
   return value;
 }
 
-function publicState() {
+function publicState(server) {
+  const session = server === undefined ? primarySession() : sessionFor(server);
+  const config = session?.config;
+  const device = session?.status;
   return {
-    paired: Boolean(config) && !status.accessMismatch,
+    paired: Boolean(config) && !device?.accessMismatch,
     windowsElevation: getWindowsElevation(),
-    backgroundClient: { running: Boolean(runtime?.pid), elevation: status.deviceElevation || null },
+    backgroundClient: { running: Boolean(session?.runtime?.pid), elevation: device?.deviceElevation || null },
     server: config?.server || "",
     clientId: config?.clientId || "",
     version: app.getVersion(),
@@ -239,6 +285,7 @@ function publicState() {
     appearance: currentAppearance,
     cancelShortcut: overlayPreferences?.getCancelShortcut?.() ?? "Escape",
     ...status,
+    ...device,
   };
 }
 
@@ -302,18 +349,18 @@ async function warnIfDesktopPermissionsMissing() {
 
 function hubState() {
   const serverRows = require("./src/main/device-servers.cjs").deviceServerRows(
-    desktop?.getRecentServers() || [], config, status, os.hostname());
+    desktop?.getRecentServers() || [], sessions, os.hostname());
   return { ...publicState(), serverRows };
 }
 
 function broadcast() {
   window?.webContents.send("hub:status", hubState());
-  tray?.setToolTip(`${APP_NAME} — ${status.connection}`);
+  tray?.setToolTip(`${APP_NAME} — ${[...sessions.values()].filter(session => session.status.connection === "online").length} connected`);
   updateTray();
 }
 
 function cancelComputerUse() {
-  runtime?.cancelComputerUse();
+  for (const session of sessions.values()) session.runtime?.cancelComputerUse();
   clearInterval(computerUseCursorTimer);
   computerUseCursorTimer = undefined;
   computerUseOverlay?.hide();
@@ -327,7 +374,8 @@ function trayImage() {
 
 function updateTray() {
   if (!tray) return;
-  const key = JSON.stringify([status.connection, status.deviceElevation, Boolean(config), autostartEnabled, appUpdate.phase, overlayPreferences?.getAssistantShortcuts?.(), annotationOverlay?.status()]);
+  const connections = [...sessions.values()].map(session => session.status.connection);
+  const key = JSON.stringify([connections, autostartEnabled, appUpdate.phase, overlayPreferences?.getAssistantShortcuts?.(), annotationOverlay?.status()]);
   if (key === lastTrayKey) return;
   lastTrayKey = key;
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -340,7 +388,7 @@ function updateTray() {
       ...(annotationOverlay?.status().displays || []).flatMap(d => d.items.filter(i=>i.type==="card").map(i=>({ label: "Interact: "+d.name+" / "+i.id, click: () => { annotationOverlay.execute({operation:"interact",display_id:d.id,interactive_id:i.id}).catch(error=>{status.error=error.message;broadcast();}); } }))),
     ] },
     { label: `Desktop app: ${getWindowsElevation()==="administrator"?"Administrator":getWindowsElevation()==="unknown"?"Unverified":"Standard user"}`, enabled: false },
-    { label: `Remote Client: ${status.deviceElevation === "administrator" ? "Administrator" : status.deviceElevation === "user" ? "Standard user" : "Not connected"} — ${status.connection}`, enabled: false },
+    { label: `Remote Client: ${connections.filter(value => value === "online").length} of ${connections.length} connected`, enabled: false },
     { type: "separator" },
     { label: "Start at login", type: "checkbox", checked: autostartEnabled,
       click: async (item) => { try { await setAutostart(item.checked); } catch (error) { lastTrayKey = ""; status.error = error.message; broadcast(); } } },
@@ -356,11 +404,15 @@ function updateTray() {
   ]));
 }
 
+function deviceSettingsOrigin() {
+  try { return pairingOrigin(deviceSettingsWorkspace?.getState().server); } catch { return undefined; }
+}
+
 function showWindow(workspace) {
   deviceSettingsWorkspace = desktop?.getWindows().includes(workspace) ? workspace : desktop?.activeWindow;
   if (installingUpdate) { void updateWindow.show(); return; }
   if (!window) createWindow();
-  window.webContents.send("hub:status", hubState());
+  window.webContents.send("hub:status", { ...hubState(), preferredOrigin: deviceSettingsOrigin() });
   window.show();
   window.focus();
 }
@@ -453,48 +505,70 @@ function stopComputerUseCursor() {
   computerUseOverlay?.hideCursor(650);
 }
 
-async function startRuntime() {
-  const epoch=++runtimeEpoch,selected=config;
-  if(!selected||status.accessMismatch)return;
-  // Keep an existing User connection alive while an admin consent is pending.
-  if(process.platform==="win32"&&selected.permissionMode==="admin")await administratorHost.ensure();
-  if(epoch!==runtimeEpoch||config!==selected||quitting)return;
-  status.deviceElevation=null;
-  annotationOverlay?.clearAll();
-  computerUseOverlay?.hide();
-  runtime?.stop();
-  runtime = null;
-  if(process.platform==="win32"&&selected.permissionMode==="user")administratorHost.close();
-  currentAppearance = appearance.fallback;
-  computerUseOverlay?.setAppearance(currentAppearance);
-  broadcast();
-  if (!config || status.accessMismatch) return;
+function releasePresentation(session) {
+  if (captureOwner === session) {
+    captureOwner = undefined;
+    computerUseOverlay?.resumeCapture();
+    annotationOverlay?.resumeCapture();
+  }
+  if (inputOwner === session) {
+    inputOwner = undefined;
+    clearInterval(computerUseCursorTimer);
+    computerUseCursorTimer = undefined;
+    computerUseOverlay?.hide();
+  }
+  if (annotationOwner === session) {
+    annotationOwner = undefined;
+    annotationOverlay?.clearAll();
+  }
+}
+
+function stopRuntime(session) {
+  ++session.epoch;
+  session.runtime?.stop();
+  session.runtime = undefined;
+  releasePresentation(session);
+}
+
+async function startRuntime(session) {
+  const selected = session.config;
+  if (!selected || session.status.accessMismatch || quitting) return;
+  stopRuntime(session);
+  const epoch = session.epoch;
+  const live = () => !quitting && sessions.get(session.origin) === session && session.epoch === epoch;
   const { startDeviceHost } = require("./src/device/runtime.cjs");
   const { showNativeNotification } = require("./notification-native.cjs");
-  const startHost=process.platform==="win32"&&config.permissionMode==="admin"
-    ? options=>require("./src/device/admin-controller.cjs").attachAdminRuntime(administratorHost,options)
-    : startDeviceHost;
+  const admin = process.platform === "win32" && selected.permissionMode === "admin";
+  const startHost = admin ? options => attachAdminRuntime(session.admin, options) : startDeviceHost;
   const { createNotificationReceiver } = await import(pathToFileURL(path.join(__dirname, "notification-client.mjs")).href);
-  if(epoch!==runtimeEpoch||config!==selected||quitting)return;
-  runtime = startHost({
-    utilityProcess,
-    receiveNotification: createNotificationReceiver({
-      config:selected, configPath:configPath(),
-      available:()=>status.desktopAvailable&&Notification.isSupported(),
-      show:notification=>showNativeNotification({Notification,openChat:openDesktopChat,server:selected.server,notification})
-    }),
-    config:selected,
-    configPath: configPath(),
-    capabilities: { desktopAvailable: status.desktopAvailable, overlayAnnotations: Boolean(annotationOverlay && status.desktopAvailable), nativeNotifications: screen.getAllDisplays().length > 0 && Notification.isSupported() },
-    showNotification: notification => showNativeNotification({ Notification, openChat: openDesktopChat, server: selected.server, notification }),
+  if (!live()) return;
+  const configPath = originDataPath(session.origin);
+  const show = notification => live() && showNativeNotification({ Notification, openChat: (id, server) => { if (live()) return openDesktopChat(id, server); }, server: session.origin, notification });
+  session.status.connection = "connecting";
+  session.status.error = "";
+  session.status.deviceElevation = null;
+  session.runtime = startHost({
+    utilityProcess, config: selected, configPath, capabilities: runtimeCapabilities(),
+    receiveNotification: createNotificationReceiver({ config: selected, configPath, available: () => live() && status.desktopAvailable && Notification.isSupported(), show }),
+    showNotification: show,
     onEvent(event) {
-      if(epoch!==runtimeEpoch||config!==selected||quitting)return;
-      if(event.type==="device_access"){status.deviceElevation=event.elevation;broadcast();return;}
+      if (!live()) throw Error("Device pairing changed.");
+      if (event.type === "device_access") { session.status.deviceElevation = event.elevation; broadcast(); return; }
       if (event.type === "desktop_overlay") {
-        if (!annotationOverlay) throw new Error("Desktop annotations are not available");
-        return annotationOverlay.execute(event.params);
+        if (!annotationOverlay) throw Error("Desktop annotations are not available.");
+        if (annotationOwner && annotationOwner !== session && annotationRequests === 0 &&
+            annotationOverlay.status().displays.every(display => display.items.length === 0)) {
+          annotationOverlay.clearAll();
+          annotationOwner = undefined;
+        }
+        if (annotationOwner && annotationOwner !== session) throw Error("Another paired server owns the desktop annotations.");
+        if (event.params?.operation !== "status") annotationOwner = session;
+        annotationRequests++;
+        return annotationOverlay.execute(event.params, session.origin).finally(() => { annotationRequests--; });
       }
       if (event.type === "appearance") {
+        const active = desktop?.getState().server;
+        if (sessionFor(active) !== session) return;
         const next = appearance.normalize(event.appearance);
         if (next && JSON.stringify(next) !== JSON.stringify(currentAppearance)) {
           currentAppearance = next;
@@ -507,44 +581,56 @@ async function startRuntime() {
       }
       if (event.type === "computer_use") {
         if (event.phase === "start") {
+          if (inputOwner && inputOwner !== session) throw Error("Another paired server is using the desktop.");
+          inputOwner = session;
           computerUseOverlay?.touch();
           if (event.operation === "key") computerUseOverlay?.suppressInjectedShortcut(event.key);
           startComputerUseCursor();
-        } else if (event.phase === "end") stopComputerUseCursor();
-        else if (event.phase === "capture-start") { computerUseOverlay?.suspendCapture(); annotationOverlay?.suspendCapture(); }
-        else if (event.phase === "capture-end") { computerUseOverlay?.resumeCapture(); annotationOverlay?.resumeCapture(); }
+        } else if (inputOwner === session && event.phase === "end") {
+          inputOwner = undefined;
+          stopComputerUseCursor();
+        } else if (inputOwner === session && event.phase === "capture-start") {
+          captureOwner = session;
+          computerUseOverlay?.suspendCapture(); annotationOverlay?.suspendCapture();
+        } else if (captureOwner === session && event.phase === "capture-end") {
+          captureOwner = undefined;
+          computerUseOverlay?.resumeCapture(); annotationOverlay?.resumeCapture();
+        }
         return;
       }
       if (event.type !== "connection") return;
       if (event.status !== "online") {
-        annotationOverlay?.clearAll();
-        clearInterval(computerUseCursorTimer);
-        computerUseCursorTimer = undefined;
-        computerUseOverlay?.hide();
+        if (inputOwner === session) session.runtime?.cancelComputerUse();
+        releasePresentation(session);
       }
-      previousConnection = status.connection;
-      status.connection = event.status;
-      status.error = event.error || "";
-      if (event.status === "online" && previousConnection === "offline" && Notification.isSupported()) {
+      const previous = session.status.connection;
+      session.status.connection = event.status;
+      session.status.error = event.error || "";
+      if (event.status === "online" && previous === "offline" && Notification.isSupported()) {
         new Notification({ title: APP_NAME, body: "Connection restored" }).show();
       }
       broadcast();
     },
   });
+  broadcast();
 }
 
-async function fetchSnapshot() {
-  if (!config) return { client: null, audit: [] };
-  const response = await fetch(`${config.server}/api/remote-clients/hub`, {
-    headers: {
-      "x-metis-client-id": config.clientId,
-      Authorization: `Bearer ${config.credential}`,
-    },
-    signal: AbortSignal.timeout(12_000),
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || `Hub request failed (${response.status})`);
-  return data;
+async function startOrReport(session) {
+  try { await startRuntime(session); }
+  catch (error) {
+    if (sessions.get(session.origin) === session && !quitting) {
+      Object.assign(session.status, { connection: "error", error: error.message });
+      broadcast();
+    }
+  }
+}
+
+async function fetchSnapshot(origin) {
+  const session = requireSession(origin);
+  if (!session.config || session.status.accessMismatch) throw Error("Access is paused for this server.");
+  const snapshot = await fetchPairingSnapshot(session.config);
+  if (sessions.get(origin) !== session || quitting) throw Error("This pairing has changed.");
+  return snapshot;
 }
 
 function registerIpc() {
@@ -568,77 +654,55 @@ function registerIpc() {
     setImmediate(() => { if (!replay.isDestroyed()) replay.close(); });
   });
   handle("hub:replay-onboarding", showOnboardingReplay);
-  handle("hub:state", () => hubState());
-  handle("hub:restart-as-administrator", () => enableAdministratorClient());
-  handle("hub:snapshot", () => fetchSnapshot());
+  handle("hub:state", () => ({ ...hubState(), preferredOrigin: deviceSettingsOrigin() }));
+  handle("hub:restart-as-administrator", (_event, origin) => enableAdministratorClient(origin));
+  handle("hub:snapshot", (_event, origin) => fetchSnapshot(origin));
   handle("hub:pair", async (_event, input) => {
-    const revision=++pairingEpoch;
-    const server = normalizeServer(input?.server).replace(/\/+$/, "");
-    const token = String(input?.token || "").trim();
-    let parsed;
-    try { parsed = new URL(server); } catch { throw new Error("Enter a valid server URL"); }
-    if (!["https:", "http:"].includes(parsed.protocol) || parsed.username || parsed.password) {
-      throw new Error("Enter a valid HTTP or HTTPS server URL");
-    }
-    if (!token) throw new Error("Enter the pairing code from Metis");
-    const permissionMode = token.startsWith("a_") ? "admin" : "user";
-    if (process.platform === "win32") {
-      const elevated = await isElevated();
-      if (permissionMode === "admin" && !elevated) await administratorHost.ensure();
-      if (permissionMode === "user" && elevated) throw new Error("User access was selected in Metis. Quit Metis from the tray, then start normally without administrator rights and enter the same code.");
-    }
-    if(revision!==pairingEpoch||quitting)throw Error("Pairing was cancelled.");
-    const response = await fetch(`${parsed.origin}/api/remote-clients/enroll`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token,
-        name: os.hostname(),
-        hostname: os.hostname(),
+    const origin = pairingOrigin(input?.server);
+    if (quitting || pendingPairings.has(origin)) throw Error("Pairing is already in progress or Metis is closing.");
+    if (process.platform === "win32" && await isElevated()) throw Error("Open Metis normally before pairing a device.");
+    if (quitting || pendingPairings.has(origin)) throw Error("Pairing is already in progress or Metis is closing.");
+    const request = new AbortController();
+    pendingPairings.set(origin, request);
+    const assertCurrent = () => {
+      if (request.signal.aborted || quitting) throw Error("Pairing was cancelled.");
+    };
+    let next, previous;
+    try {
+      const config = await enroll({ server: origin, token: input.token }, {
+        name: os.hostname(), hostname: os.hostname(),
         os: `${process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux"} ${os.release()}`,
-        architecture: os.arch(),
-        version: app.getVersion(),
-        permissionMode,
-        capabilities: [
-          ...(permissionMode === "admin"
-            ? ["user_files", "user_processes", "user_directories", "system_files", "services", "disks", "admin_processes"]
-            : ["user_files", "user_processes", "user_directories"]),
-          ...(status.desktopAvailable ? ["desktop_gui"] : []),
-        ],
-      }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const data = await response.json();
-    if(revision!==pairingEpoch||quitting)throw Error("Pairing was cancelled.");
-    if (!response.ok || !data.client?.id || !data.credential) {
-      throw new Error(data.error || "Pairing failed");
+        architecture: os.arch(), version: app.getVersion(), desktopAvailable: status.desktopAvailable,
+      }, { signal: request.signal });
+      assertCurrent();
+      previous = sessions.get(origin);
+      next = makeSession(origin, { config });
+      if (process.platform === "win32" && config.permissionMode === "admin") {
+        // Only an explicit Administrator pairing (or the selected resume action)
+        // may prompt for UAC. A new origin never reuses another origin's host.
+        next.admin = newAdministratorHost(next);
+        await next.admin.ensure();
+        assertCurrent();
+        if (!next.admin.connected) throw Error("Administrator Remote Client disconnected.");
+        next.status.accessMismatch = false;
+      }
+      credentialStore.save(config);
+      sessions.set(origin, next);
+      if (previous) { stopRuntime(previous); previous.admin?.shutdown(); }
+      await startOrReport(next);
+      return { ...hubState(), pairedOrigin: origin };
+    } finally {
+      if (next && sessions.get(origin) !== next) next.admin?.shutdown();
+      if (pendingPairings.get(origin) === request) pendingPairings.delete(origin);
     }
-    if (data.client.permissionMode !== permissionMode) throw new Error("The server returned a different access mode. Pairing was stopped.");
-    const next = { server: parsed.origin, clientId: data.client.id, credential: data.credential, permissionMode: data.client.permissionMode };
-    saveConfig(next);
-    config = next;
-    status.accessMismatch = false;
-    status.connection = "connecting";
-    status.error = "";
-    await startRuntime();
-    broadcast();
-    return hubState();
   });
-  handle("hub:unpair", async () => {
-    ++pairingEpoch;++runtimeEpoch;
-    computerUseOverlay?.hide();
-    runtime?.stop();
-    runtime = null;
-    config = null;
-    administratorHost.close();
-    status.accessMismatch=false;
-    status.deviceElevation=null;
-    currentAppearance = appearance.fallback;
-    computerUseOverlay?.setAppearance(currentAppearance);
-    assistant?.setAppearance(currentAppearance);
-    fs.rmSync(configPath(), { force: true });
-    status.connection = "offline";
-    status.error = "";
+  handle("hub:unpair", async (_event, origin) => {
+    const session = requireSession(origin);
+    credentialStore.remove(origin);
+    pendingPairings.get(origin)?.abort();
+    sessions.delete(origin);
+    stopRuntime(session);
+    session.admin?.shutdown();
     broadcast();
     return hubState();
   });
@@ -651,14 +715,15 @@ function registerIpc() {
     await desktop.openServer(entry.url);
     await desktop.show();
   });
-  handle("hub:export", async () => {
-    const snapshot = await fetchSnapshot();
+  handle("hub:export", async (_event, origin) => {
+    const session = requireSession(origin);
+    const snapshot = await fetchSnapshot(origin);
     const result = await dialog.showSaveDialog(window, {
       title: "Export command history",
       defaultPath: `metis-remote-commands-${new Date().toISOString().slice(0, 10)}.json`,
       filters: [{ name: "JSON", extensions: ["json"] }],
     });
-    if (result.canceled || !result.filePath) return false;
+    if (result.canceled || !result.filePath || sessions.get(origin) !== session) return false;
     fs.writeFileSync(result.filePath, JSON.stringify({ exportedAt: new Date().toISOString(), audit: snapshot.audit }, null, 2), "utf8");
     return true;
   });
@@ -780,10 +845,9 @@ if(process.platform==="win32"){
   app.whenReady().then(async () => {
     app.setAppUserModelId(process.env.METIS_DESKTOP_TEST_DATA ? "ai.metis.remoteclient.test" : "ai.metis.remoteclient");
     if (process.platform === "win32" && process.argv.includes("--updated")) void updateWindow.show("opening");
-    try { config = loadConfig(); } catch (error) { status.error = error.message; }
-    const actualElevation=getWindowsElevation();
-    status.accessMismatch=process.platform==="win32"&&Boolean(config)&&actualElevation==="unknown";
-    if(status.accessMismatch)status.error="Windows process rights could not be verified. Device access is paused.";
+    try {
+      for (const [origin, entry] of credentialStore.load()) sessions.set(origin, makeSession(origin, entry));
+    } catch (error) { status.error = error.message; }
     if (process.platform === "win32" && app.getLoginItemSettings().openAtLogin) {
       app.setLoginItemSettings({ openAtLogin: false, path: process.execPath });
       try { await setAutostart(true); } catch (error) { status.error = error.message; }
@@ -809,13 +873,16 @@ if(process.platform==="win32"){
     }
     computerUseOverlay = createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCancel: cancelComputerUse, hideFromCapture: overlayPreferences.get(), cancelShortcut: overlayPreferences.getCancelShortcut() });
     annotationOverlay = require('./src/main/annotation-overlay.cjs').createAnnotationOverlay({
-      BrowserWindow, screen, ipcMain, getServer: () => config?.server || desktop?.getState().server || require('./policy.cjs').DEFAULT_SERVER,
+      BrowserWindow, screen, ipcMain, getServer: () => annotationOwner?.origin || desktop?.getState().server || DEFAULT_SERVER,
       appearance: currentAppearance, hideFromCapture: overlayPreferences.get(), onChange: () => { lastTrayKey = ''; updateTray(); }
     });
     const { createAssistant } = require("./src/main/assistant.cjs");
     assistant = createAssistant({
-      getServer: () => desktop?.getState().server || config?.server || require("./policy.cjs").DEFAULT_SERVER,
-      getDevice: server => ({ clientId:status.accessMismatch||!config||!sameOrigin(server,config.server)?"":config.clientId || "", hostname:os.hostname(), platform:process.platform, version:app.getVersion() }),
+      getServer: () => desktop?.getState().server || primarySession()?.origin || DEFAULT_SERVER,
+      getDevice: server => {
+        const session = sessionFor(server);
+        return { clientId: session?.status.accessMismatch ? "" : session?.config?.clientId || "", hostname: os.hostname(), platform: process.platform, version: app.getVersion() };
+      },
       annotationOverlay, onEscape: () => annotationOverlay?.clearAll(),
       computerOverlay:computerUseOverlay, appearance:currentAppearance, hideFromCapture:overlayPreferences.get(),
       getShortcuts: () => overlayPreferences.getAssistantShortcuts(), onDevices: showWindow,
@@ -834,14 +901,8 @@ if(process.platform==="win32"){
     finally { updateWindow.close(); }
     traceStartup("desktop-visible-"+desktop.win.isVisible());
     markDesktopReady();
-    if(status.accessMismatch){showWindow();broadcast();}
-    if (config) {
-      try { await startRuntime(); } catch (error) {
-        status.connection = "error";
-        status.error = error.message;
-        broadcast();
-      }
-    }
+    if ([...sessions.values()].some(session => session.status.accessMismatch)) showWindow();
+    await Promise.all([...sessions.values()].map(startOrReport));
     setupUpdates();
     // Device permissions are requested from local settings when explicitly needed.
   });
@@ -852,10 +913,12 @@ if(process.platform==="win32"){
         installingUpdate = true;
         await updateWindow.show();
       }
-      const pids=[runtime?.pid,administratorHost.pid];
-      const hadAdministrator=administratorHost.connected;
-      quitting=true;++runtimeEpoch;++pairingEpoch;
-      runtime?.stop();administratorHost.shutdown();
+      const current = [...sessions.values()];
+      const pids = current.flatMap(session => [session.runtime?.pid, session.admin?.pid]);
+      const hadAdministrator = current.some(session => session.admin?.connected);
+      quitting = true;
+      for (const request of pendingPairings.values()) request.abort();
+      for (const session of current) { stopRuntime(session); session.admin?.shutdown(); }
       if(wantsInstall)await require("./src/main/update-controller.cjs").waitForProcessExit(pids);
       else if(hadAdministrator)await new Promise(resolve=>setTimeout(resolve,400));
     },
@@ -877,4 +940,4 @@ if(process.platform==="win32"){
   app.on("window-all-closed", () => {});
 })().catch(error=>{traceStartup("failed-"+error.message);dialog.showErrorBox(APP_NAME,error.message||"Metis could not start.");app.quit();});
 
-module.exports = { showDesktop, showWindow, getDesktop: () => desktop, getDeviceWindow: () => window, getRuntimePid: () => runtime?.pid, getAssistant: () => assistant, getAnnotationOverlay: () => annotationOverlay, publicState };
+module.exports = { showDesktop, showWindow, getDesktop: () => desktop, getDeviceWindow: () => window, getRuntimePid: () => primarySession()?.runtime?.pid, getAssistant: () => assistant, getAnnotationOverlay: () => annotationOverlay, publicState };
