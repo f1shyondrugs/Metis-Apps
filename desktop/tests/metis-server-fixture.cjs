@@ -1,5 +1,5 @@
 function replyMetisVersion(request, response) {
-  if (request.url !== '/api/system/version') return false;
+  if (!request.url.endsWith('/api/system/version')) return false;
   response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   response.end(JSON.stringify({
     release: { schemaVersion: 1, version: '1.0.0', packageVersion: '1.0.0', channel: 'development',
