@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld("metis", {
   snapshot: () => ipcRenderer.invoke("hub:snapshot"),
   pair: (input) => ipcRenderer.invoke("hub:pair", input),
   unpair: () => ipcRenderer.invoke("hub:unpair"),
-  openServer: () => ipcRenderer.invoke("hub:open-server"),
+  openServer: (origin) => ipcRenderer.invoke("hub:open-server", origin),
   exportAudit: () => ipcRenderer.invoke("hub:export"),
   setOverlayCaptureHidden: (value) => ipcRenderer.invoke("hub:set-overlay-capture-hidden", value),
   setCancelShortcut: (value) => ipcRenderer.invoke("hub:set-cancel-shortcut", value),

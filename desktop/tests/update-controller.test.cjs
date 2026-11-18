@@ -5,7 +5,7 @@ function fixture(options={}){
  const updater=new EventEmitter();let checks=0,downloads=0,installs=0;
  updater.checkForUpdates=async()=>{checks++;};
  updater.downloadUpdate=async()=>{downloads++;updater.emit('update-downloaded',{version:'2.0.0'});};
- updater.quitAndInstall=(silent,runAfter)=>{assert.equal(silent,false);assert.equal(runAfter,true);installs++;};
+ updater.quitAndInstall=(silent,runAfter)=>{assert.equal(silent,(options.platform||process.platform)==='win32');assert.equal(runAfter,true);installs++;};
  const state=createUpdateState();
  const controller=createUpdateController({updater,state,version:'1.7.19',sleep:async()=>{},...options});
  return {updater,state,controller,counts:()=>({checks,downloads,installs})};
@@ -38,6 +38,17 @@ test('download is not installation; install waits for owned process shutdown exa
  assert.equal(f.counts().installs,0);const pending=f.controller.install();
  assert.equal(f.counts().installs,0);assert.equal(await f.controller.install(),false);
  finish();assert.equal(await pending,true);assert.equal(f.counts().installs,1);
+});
+test('an installer launch error leaves no successful handoff',async()=>{
+ const f=fixture({platform:'win32'});
+ await f.updater.downloadUpdate();
+ f.updater.quitAndInstall=(silent,reopen)=>{
+   assert.equal(silent,true);assert.equal(reopen,true);
+   f.updater.emit('error',Object.assign(Error('private path'),{code:'EACCES'}));
+ };
+ assert.equal(await f.controller.install(),false);
+ assert.equal(f.state.value.phase,'error');
+ assert.doesNotMatch(f.state.value.message,/private path/);
 });
 test('a failed process drain never invokes the installer',async()=>{
  const f=fixture({beforeInstall:async()=>{throw Object.assign(Error('busy'),{code:'ETIMEDOUT'});}});

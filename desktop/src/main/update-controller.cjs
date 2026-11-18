@@ -8,7 +8,7 @@ function errorCode(error) {
 }
 function transient(error) { return ['ENOTFOUND','EAI_AGAIN','ECONNRESET','ETIMEDOUT','ECONNREFUSED','ENETUNREACH'].includes(error?.code) || [408,429,500,502,503,504].includes(Number(error?.statusCode || error?.status)); }
 function createUpdateController({ updater, state, version, platform=process.platform, arch=process.arch, diagnosticsFile, changed=()=>{}, ready=()=>{}, beforeInstall=async()=>{}, sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)) }) {
-  let checking, downloading, installing=false, disposed=false;
+  let checking, downloading, installing=false, disposed=false, installError;
   const records = [];
   if(diagnosticsFile)try{
     if(fs.statSync(diagnosticsFile).size<=64000){
@@ -63,7 +63,7 @@ function createUpdateController({ updater, state, version, platform=process.plat
     'download-progress':info=>{const value=Math.floor(Number(info?.percent));if(Number.isFinite(value)&&value!==state.value.progress){state.value.progress=Math.max(0,Math.min(100,value));publish();}},
     // downloadUpdate/checkForUpdates promises own errors; this listener prevents
     // unhandled EventEmitter errors without initiating duplicate retries.
-    error:error=>{record('updater-error',{code:errorCode(error)});},
+    error:error=>{record('updater-error',{code:errorCode(error)}); if(installing) installError=error;},
   };
   updater.autoDownload=false;
   // Updates install through the drained before-quit flow, never a hidden early hook.
@@ -86,8 +86,11 @@ function createUpdateController({ updater, state, version, platform=process.plat
     try {
       await beforeInstall();
       if(disposed)return false;
-      // electron-updater 6 API: explicit normal installer, restart afterwards.
-      updater.quitAndInstall(false,true);
+      // Windows uses the installer-owned update banner during the binary swap.
+      // Other platforms keep their existing installer behavior.
+      installError=undefined;
+      updater.quitAndInstall(platform==="win32",true);
+      if(installError)throw installError;
       return true;
     } catch(error) {installing=false;failure(error);return false;}
   }
