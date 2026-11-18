@@ -2,11 +2,11 @@
 
 The desktop app runs as the signed-in **Standard user**. An Administrator pairing starts a separate elevated **Metis Device Connection** process through ordinary Windows UAC. It has no window or tray. Only the normal desktop process owns the shared **Metis** tray, desktop windows, assistant and notifications.
 
-Enter an Administrator pairing code in **Remote Client Device Settings** and confirm UAC. You can also use **Enable Administrator Remote Client** before pairing. Cancelling leaves the normal app and any current User connection unchanged; it does not consume the code. The elevated device utility independently verifies its actual token before loading remote commands. An existing User pairing is never silently upgraded.
+Enter an Administrator pairing code in **Remote Client Device Settings** and confirm UAC before the code is submitted. Use **Enable Administrator Remote Client** to resume a saved, paused Administrator pairing. Cancelling leaves the normal app and other connections unchanged; it does not consume the code. The elevated device utility independently verifies its actual token before loading remote commands. An existing User pairing is never silently upgraded.
 
 Closing either window with X hides it. Device commands and notifications continue in the background. **Open Metis** or **Open Remote Client Device Settings** in the one tray reopens the relevant window without another UAC prompt. **Quit** stops both processes. Loss of the private desktop channel also stops the elevated host, so crashes cannot leave an uncontrolled elevated client.
 
-Launching the desktop shortcut with Run as administrator redirects the UI to the same OS account/session's verified normal shell token. This does not change a pairing grant or skip the separate device consent. If the interactive shell is unavailable or belongs to another account/session, launch fails rather than keeping an elevated web UI. Autostart of the UI uses Limited rights; an admin-paired cold start can request device UAC once, and cancellation leaves the desktop usable with an explicit retry.
+Launching the desktop shortcut with Run as administrator redirects the UI to the same OS account/session's verified normal shell token. This does not change a pairing grant or skip the separate device consent. If the interactive shell is unavailable or belongs to another account/session, launch fails rather than keeping an elevated web UI. Autostart of the UI uses Limited rights; a cold start can request device UAC once per saved Administrator pairing, sequentially. Cancellation leaves the desktop usable and the remaining Administrator pairings paused with an explicit retry.
 
 ## Local boundary
 

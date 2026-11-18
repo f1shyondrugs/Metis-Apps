@@ -18,11 +18,14 @@ function validatePairing(value) {
     credential: value.credential, permissionMode: value.permissionMode };
 }
 
-async function enroll(input, device, { signal, fetcher = fetch } = {}) {
+async function enroll(input, device, { signal, authorize, fetcher = fetch } = {}) {
   const server = pairingOrigin(input?.server);
   const token = typeof input?.token === "string" ? input.token.trim() : "";
   if (!validField(token, 512)) throw new Error("Enter a valid pairing code from Metis.");
   const permissionMode = token.startsWith("a_") ? "admin" : "user";
+  signal?.throwIfAborted();
+  await authorize?.(permissionMode);
+  signal?.throwIfAborted();
   const response = await fetcher(server + "/api/remote-clients/enroll", {
     method: "POST", redirect: "manual",
     headers: { "Content-Type": "application/json" },

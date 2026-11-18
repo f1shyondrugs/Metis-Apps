@@ -667,25 +667,25 @@ function registerIpc() {
     const assertCurrent = () => {
       if (request.signal.aborted || quitting) throw Error("Pairing was cancelled.");
     };
-    let next, previous;
+    const next = makeSession(origin, {});
     try {
       const config = await enroll({ server: origin, token: input.token }, {
         name: os.hostname(), hostname: os.hostname(),
         os: `${process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux"} ${os.release()}`,
         architecture: os.arch(), version: app.getVersion(), desktopAvailable: status.desktopAvailable,
-      }, { signal: request.signal });
-      assertCurrent();
-      previous = sessions.get(origin);
-      next = makeSession(origin, { config });
-      if (process.platform === "win32" && config.permissionMode === "admin") {
-        // Only an explicit Administrator pairing (or the selected resume action)
-        // may prompt for UAC. A new origin never reuses another origin's host.
+      }, { signal: request.signal, authorize: async mode => {
+        if (process.platform !== "win32" || mode !== "admin") return;
+        // UAC cancellation must not spend the one-shot pairing code or touch existing sessions.
         next.admin = newAdministratorHost(next);
         await next.admin.ensure();
         assertCurrent();
         if (!next.admin.connected) throw Error("Administrator Remote Client disconnected.");
-        next.status.accessMismatch = false;
-      }
+      } });
+      assertCurrent();
+      if (process.platform === "win32" && config.permissionMode === "admin" && !next.admin?.connected)
+        throw Error("Administrator Remote Client disconnected.");
+      const previous = sessions.get(origin);
+      next.config = config;
       credentialStore.save(config);
       sessions.set(origin, next);
       if (previous) { stopRuntime(previous); previous.admin?.shutdown(); }
@@ -901,9 +901,25 @@ if(process.platform==="win32"){
     finally { updateWindow.close(); }
     traceStartup("desktop-visible-"+desktop.win.isVisible());
     markDesktopReady();
-    if ([...sessions.values()].some(session => session.status.accessMismatch)) showWindow();
-    await Promise.all([...sessions.values()].map(startOrReport));
     setupUpdates();
+    await Promise.all([...sessions.values()].map(startOrReport));
+    if (process.platform === "win32" && getWindowsElevation() === "user") {
+      // Retain cold-start reconnect for saved Administrator pairings; UAC prompts
+      // are serialized and a cancellation leaves this and later pairings paused.
+      for (const session of sessions.values()) {
+        if (quitting) break;
+        if (session.config?.permissionMode !== "admin") continue;
+        try { await enableAdministratorClient(session.origin); }
+        catch (error) {
+          if (sessions.get(session.origin) === session && !quitting) {
+            Object.assign(session.status, { connection: "error", error: error.message });
+            broadcast();
+          }
+          break;
+        }
+      }
+    }
+    if (!quitting && [...sessions.values()].some(session => session.status.accessMismatch)) showWindow();
     // Device permissions are requested from local settings when explicitly needed.
   });
   const updateShutdown=require("./src/main/update-shutdown.cjs").createUpdateShutdown({

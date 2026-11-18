@@ -28,6 +28,7 @@ async function fixture(name) {
   const deviceId = "same-id-on-both-servers";
   f.clientId = deviceId;
   const server = http.createServer(async (req, res) => {
+    if (require('./metis-server-fixture.cjs').replyMetisVersion(req, res)) return;
     const json = (value, status = 200) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(value));
     if (req.url === "/api/remote-clients/enroll") {
       f.enrollments++;

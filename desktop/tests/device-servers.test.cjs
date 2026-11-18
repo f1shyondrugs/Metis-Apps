@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { deviceServerRows } = require("../src/main/device-servers.cjs");
-const { pairingOrigin, validatePairing } = require("../src/main/device-pairing.cjs");
+const { pairingOrigin, validatePairing, enroll } = require("../src/main/device-pairing.cjs");
 
 test("device settings deduplicate recent entries but retain every exact paired origin", () => {
   const rows = deviceServerRows([
@@ -18,6 +18,29 @@ test("device settings deduplicate recent entries but retain every exact paired o
   ]);
   assert.equal(rows[0].url, "https://lab.example:8443/chat");
   assert.doesNotMatch(JSON.stringify(rows), /private|secret/);
+});
+
+test("denied or cancelled Administrator consent never consumes a pairing code", async () => {
+  const input = { server: "https://lab.example/", token: "a_fixture" };
+  let requests = 0;
+  const fetcher = async () => {
+    requests++;
+    return Response.json({ client: { id: "fixture", permissionMode: "admin" }, credential: "fixture-secret" });
+  };
+  await assert.rejects(enroll(input, {}, { fetcher, authorize: async mode => {
+    assert.equal(mode, "admin");
+    throw Error("UAC cancelled");
+  } }), /UAC cancelled/);
+  const controller = new AbortController();
+  await assert.rejects(enroll(input, {}, { fetcher, signal: controller.signal, authorize: () => controller.abort() }), /abort/i);
+  assert.equal(requests, 0);
+  let approved = false;
+  const paired = await enroll(input, {}, { authorize: () => { approved = true; }, fetcher: async (...args) => {
+    assert.equal(approved, true);
+    return fetcher(...args);
+  }});
+  assert.equal(paired.permissionMode, "admin");
+  assert.equal(requests, 1);
 });
 
 test("pairing validates origins and authentication fields without inferring elevated policy", () => {
