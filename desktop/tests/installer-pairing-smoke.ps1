@@ -59,7 +59,16 @@ function Wait-Control([string]$Name, [Windows.Automation.ControlType]$Type, [boo
     }
     Start-Sleep -Milliseconds 140
   } while ((Get-Date) -lt $deadline)
-  [MetisOwnWindows]::Describe([int]$app.Id) | Write-Output
+  [MetisOwnWindows]::Describe([int]$app.Id) | Out-Host
+  try {
+    $win = Find-FixtureWindow $Hub
+    if ($win) {
+      $win.FindAll([Windows.Automation.TreeScope]::Descendants, [Windows.Automation.Condition]::TrueCondition) |
+        Select-Object -First 32 |
+        ForEach-Object { '{0}: {1}' -f $_.Current.ControlType.ProgrammaticName, $_.Current.Name } |
+        Out-Host
+    }
+  } catch [Windows.Automation.ElementNotAvailableException] {}
   throw "Owned installed test control not available: $Name (hub=$Hub)"
 }
 
@@ -107,7 +116,10 @@ try {
   Get-Content (Join-Path $sandbox 'app.stderr.log') -Tail 30 -ErrorAction SilentlyContinue | Write-Output
   throw
 } finally {
-  if ($app -and -not $app.HasExited) { Stop-Process -InputObject $app -ErrorAction SilentlyContinue }
+  if ($app -and -not $app.HasExited) {
+    Stop-Process -InputObject $app -ErrorAction SilentlyContinue
+    if (-not $app.WaitForExit(5000)) { throw 'Owned first-pairing process did not exit during fixture cleanup.' }
+  }
   if ($fixture -and -not $fixture.HasExited) { Stop-Process -InputObject $fixture -ErrorAction SilentlyContinue }
   $env:METIS_DESKTOP_TEST_DATA = $previousProfile
 }

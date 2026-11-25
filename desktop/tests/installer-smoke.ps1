@@ -43,6 +43,13 @@ foreach ($shortcut in $shortcutPaths) {
 Write-Output 'WINDOWS_INSTALL_REGISTRATION_OK'
 & node (Join-Path $PSScriptRoot 'verify-split-asar.cjs') (Join-Path $installDir 'resources\\app.asar')
 if ($LASTEXITCODE -ne 0) { throw 'Installed background host source verification failed.' }
+$pairingFailure = $null
+if ($publishedAudit) {
+  # Pair on the very first launch. Still run the independent lifecycle checks
+  # and fail the audit if first pairing or those checks fail.
+  try { & (Join-Path $PSScriptRoot 'installer-pairing-smoke.ps1') -Exe $exe }
+  catch { $pairingFailure = $_; Write-Output ('MET77_FIRST_PAIRING_FAILED: ' + $_.Exception.Message) }
+}
 $env:METIS_DESKTOP_TEST_DATA = Join-Path $env:RUNNER_TEMP 'metis-installer-data'
 $stdout = Join-Path $env:RUNNER_TEMP 'metis-installed-startup.stdout.log'
 $stderr = Join-Path $env:RUNNER_TEMP 'metis-installed-startup.stderr.log'
@@ -118,7 +125,6 @@ if($process.Id -ne $originalPid){throw 'Reopening replaced the background proces
 Write-Output 'WINDOWS_INSTALLED_CLOSE_AND_SECOND_LAUNCH_REOPEN_OK'
 Stop-Process -Id $process.Id
 Write-Output 'WINDOWS_BACKGROUND_CLOSE_OK'
-if ($publishedAudit) { & (Join-Path $PSScriptRoot 'installer-pairing-smoke.ps1') -Exe $exe }
 if ($entries[0].UninstallString -notmatch '^"([^"]+)"') { throw 'Registered uninstall command is invalid.' }
 $uninstaller = $Matches[1]
 if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($uninstaller)) -ne [IO.Path]::GetFullPath($installDir)) { throw 'Uninstaller is outside the isolated test installation.' }
@@ -129,3 +135,4 @@ while (((Test-Path $exe) -or (Test-Path $uninstallKey)) -and (Get-Date) -lt $dea
 if ((Test-Path $exe) -or (Test-Path $uninstallKey)) { throw 'Uninstall did not remove app or Windows registration.' }
 foreach ($shortcut in $shortcutPaths) { if (Test-Path $shortcut) { throw "Uninstall left shortcut: $shortcut" } }
 Write-Output 'WINDOWS_UNINSTALL_OK'
+if ($pairingFailure) { throw $pairingFailure }
