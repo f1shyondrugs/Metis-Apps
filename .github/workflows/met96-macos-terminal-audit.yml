@@ -1,0 +1,33 @@
+name: MET-96 released macOS terminal audit
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.head_ref == 'test/met96-macos-terminal' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci --prefix desktop
+      - name: Audit the exact public v1.7.34 ZIP using the default zsh shell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d "$RUNNER_TEMP/met96-mac.XXXXXX")"
+          gh release download v1.7.34 --repo f1shyondrugs/Metis-Apps --pattern 'Metis-AI-Remote-Client-arm64.zip' --dir "$fixture"
+          unset GH_TOKEN
+          zip="$fixture/Metis-AI-Remote-Client-arm64.zip"
+          echo "97b8c3bf289e9102f5343fa10275d4302957b872f3e474a8232c4355e5ca84d8  $zip" | shasum -a 256 -c -
+          echo MET96_MAC_V134_ZIP_DIGEST_OK
+          ditto -x -k "$zip" "$fixture/extracted"
+          archive="$fixture/extracted/Metis.app/Contents/Resources/app.asar"
+          test -f "$archive"
+          env -i PATH="$PATH" HOME="$fixture" TMPDIR="$fixture" SHELL=/bin/zsh TERM=xterm-256color METIS_MAC_HISTORY_AUDIT=v1.7.34 node desktop/tests/terminal-history.cjs "$archive"

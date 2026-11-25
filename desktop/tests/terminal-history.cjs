@@ -7,11 +7,14 @@ const asar = require("@electron/asar");
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function run() {
-  assert.equal(process.platform, "linux");
-  assert.notEqual(process.getuid(), 0, "Use an unprivileged native test runner");
-  assert.ok(!process.env.SHELL && !process.env.TERM, "Test a GUI-like environment without shell or TERM hints");
+  const macAudit=process.env.METIS_MAC_HISTORY_AUDIT==="v1.7.34";
+  assert.equal(process.platform,macAudit?"darwin":"linux");
+  assert.notEqual(process.getuid(),0,"Use an unprivileged native test runner");
+  if(macAudit)assert.equal(process.env.SHELL,"/bin/zsh");
+  else assert.ok(!process.env.SHELL&&!process.env.TERM,"Test a GUI-like environment without shell or TERM hints");
   assert.ok(path.isAbsolute(process.argv[2] || ""), "An exact packaged ASAR is required");
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "metis-linux-terminal-"));
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),"metis-terminal-audit-"));
+  if(macAudit)assert.equal(JSON.parse(asar.extractFile(process.argv[2],"package.json")).version,"1.7.34");
   process.env.HOME = dir;
   process.env.HISTFILE = "/dev/null";
   fs.mkdirSync(path.join(dir, "node_modules"));
@@ -24,7 +27,7 @@ async function run() {
   const { startRemoteClient } = await import(pathToFileURL(path.join(dir,"client.mjs")));
   const server = new WebSocketServer({host:"127.0.0.1",port:0,path:"/ws/remote-client"});
   await once(server,"listening");
-  let client, socket, output="", sequence=0, sessionId;
+  let client,socket,output="",sequence=0,sessionId,exited=false;
   const waiting = new Map();
   const waitFor = async (condition,label) => {
     for (let count=0;count<120;count++) { if(condition())return;await delay(25); }
@@ -42,6 +45,7 @@ async function run() {
     socket.on("message",raw=>{
       const msg=JSON.parse(String(raw));
       if(msg.type==="event"&&typeof msg.data==="string")output+=msg.data;
+      if(msg.type==="event"&&msg.event==="exit")exited=true;
       if(msg.type==="response")waiting.get(msg.requestId)?.(msg);
     });
     socket.send(JSON.stringify({type:"authenticated",clientId:"fixture"}));
@@ -64,11 +68,19 @@ async function run() {
     await input("printf '%s%s\\n' 'TERM_FIXTURE_' 'BRAVO'\n");
     await waitFor(()=>matches("BRAVO")===1,"second command");
     for (const key of ["\x1b[A","\x1b[A","\x1b[B","\n"])await input(key);
-    await waitFor(()=>matches("BRAVO")===2,"history up/up/down recalls second command");
+    if(macAudit){
+      await input("printf '%s%s\\n' 'TERM_FIXTURE_' 'BARRIER'\n");
+      await waitFor(()=>matches("BARRIER")===1,"output barrier after arrows");
+      assert.ok([1,2].includes(matches("BRAVO")));
+      console.log("MET96_MAC_V134_ZSH_RESULT",JSON.stringify({alpha:matches("ALPHA"),bravo:matches("BRAVO"),keys:["up","up","down","enter"]}));
+      console.log(matches("BRAVO")===2?"MET96_MAC_V134_ZSH_HISTORY_WORKS":"MET96_MAC_V134_ZSH_HISTORY_NOT_RECALLED");
+    }else{
+      await waitFor(()=>matches("BRAVO")===2,"history up/up/down recalls second command");
+    }
     assert.equal(matches("ALPHA"),1);
     await input("exit\n");
-    await waitFor(()=>/exit\r?\n/.test(output),"fixture shell exit");
-    console.log("MET96_PACKAGED_LINUX_HISTORY_WITHOUT_SHELL_OR_TERM_OK");
+    await waitFor(()=>exited,"fixture shell exit");
+    if(!macAudit)console.log("MET96_PACKAGED_LINUX_HISTORY_WITHOUT_SHELL_OR_TERM_OK");
   } finally{
     client?.stop();socket?.terminate();server.close();
   }
