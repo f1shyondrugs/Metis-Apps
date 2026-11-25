@@ -5,7 +5,16 @@ if (-not [MetisOwnWindows]::IsWorkspaceTitle('Metis') -or -not [MetisOwnWindows]
 Write-Output 'WINDOWS_WORKSPACE_TITLE_CLASSIFIER_OK'
 $expectedVersion = (Get-Content (Join-Path $PSScriptRoot '..\package.json') -Raw | ConvertFrom-Json).version
 if (-not $env:RUNNER_TEMP) { throw 'Installer smoke test is restricted to an isolated CI runner.' }
-$installer = Get-ChildItem (Join-Path $PSScriptRoot '..\dist') -Filter 'Metis-AI-Remote-Client-Setup.exe' | Select-Object -First 1
+$publishedAudit = $env:METIS_RELEASE_PAIRING_SMOKE -eq 'v1.7.31'
+if ($publishedAudit) {
+  if ($expectedVersion -ne '1.7.31') { throw 'Published audit source version drifted.' }
+  $installer = Get-Item (Join-Path $env:RUNNER_TEMP 'metis-v131-release\Metis-AI-Remote-Client-Setup.exe')
+  $digest = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($digest -ne '6c9be7bd4103b16d2910963acaea836ad964fdeef9e13e930065f23c5d8e1a7f') { throw 'Published installer bytes do not match the approved Release asset.' }
+  Write-Output 'MET77_RELEASED_INSTALLER_SHA256_OK'
+} else {
+  $installer = Get-ChildItem (Join-Path $PSScriptRoot '..\dist') -Filter 'Metis-AI-Remote-Client-Setup.exe' | Select-Object -First 1
+}
 if (-not $installer) { throw 'Installer missing.' }
 $installDir = Join-Path $env:RUNNER_TEMP 'Metis Installer Test'
 Start-Process -FilePath $installer.FullName -ArgumentList "/S /currentuser /D=$installDir" -Wait
@@ -102,6 +111,7 @@ if($process.Id -ne $originalPid){throw 'Reopening replaced the background proces
 Write-Output 'WINDOWS_INSTALLED_CLOSE_AND_SECOND_LAUNCH_REOPEN_OK'
 Stop-Process -Id $process.Id
 Write-Output 'WINDOWS_BACKGROUND_CLOSE_OK'
+if ($publishedAudit) { & (Join-Path $PSScriptRoot 'installer-pairing-smoke.ps1') -Exe $exe }
 if ($entries[0].UninstallString -notmatch '^"([^"]+)"') { throw 'Registered uninstall command is invalid.' }
 $uninstaller = $Matches[1]
 if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($uninstaller)) -ne [IO.Path]::GetFullPath($installDir)) { throw 'Uninstaller is outside the isolated test installation.' }
