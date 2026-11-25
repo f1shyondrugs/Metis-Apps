@@ -52,7 +52,14 @@ function Wait-Control([string]$Name, [Windows.Automation.ControlType]$Type, [boo
       $win = Find-FixtureWindow $Hub
       if ($win) {
         $control = $win.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
-        if ($control -and $control.Current.IsEnabled -and -not $control.Current.IsOffscreen) { return $control }
+        if ($control -and $control.Current.IsEnabled) {
+          if ($control.Current.IsOffscreen -and $control.Current.IsKeyboardFocusable) {
+            # The pair submit sits below the initial fold on the CI display.
+            # Focus it through normal keyboard accessibility to scroll it into view.
+            $control.SetFocus()
+          }
+          if (-not $control.Current.IsOffscreen) { return $control }
+        }
       }
     } catch [Windows.Automation.ElementNotAvailableException] {
       # The initial app frame can be replaced when the first workspace is loaded.
@@ -64,8 +71,8 @@ function Wait-Control([string]$Name, [Windows.Automation.ControlType]$Type, [boo
     $win = Find-FixtureWindow $Hub
     if ($win) {
       $win.FindAll([Windows.Automation.TreeScope]::Descendants, [Windows.Automation.Condition]::TrueCondition) |
-        Select-Object -First 32 |
-        ForEach-Object { '{0}: {1}' -f $_.Current.ControlType.ProgrammaticName, $_.Current.Name } |
+        Select-Object -First 48 |
+        ForEach-Object { '{0}: {1} enabled={2} offscreen={3}' -f $_.Current.ControlType.ProgrammaticName, $_.Current.Name, $_.Current.IsEnabled, $_.Current.IsOffscreen } |
         Out-Host
     }
   } catch [Windows.Automation.ElementNotAvailableException] {}
