@@ -67,6 +67,20 @@ async function main() {
   });
   const original = fs.readFileSync(configFile);
   fs.writeFileSync(path.join(directory, 'server.json'), JSON.stringify({ url: server }));
+  // The first native host is visible before the application finishes adopting
+  // it. Close that real window during the asynchronous startup handoff.
+  let earlyClosed=false;
+  const windowModule=require('../src/main/web-window.cjs');
+  const createHost=windowModule.createDesktopWindow;
+  windowModule.createDesktopWindow=async options=>{
+    windowModule.createDesktopWindow=createHost;
+    const entry=await createHost(options);
+    assert.equal(entry.win.isVisible(),true);
+    entry.win.close();
+    await waitFor(()=>!entry.win.isDestroyed()&&!entry.win.isVisible());
+    earlyClosed=true;
+    return entry;
+  };
   const api = require('../main.cjs');
   try { await waitFor(() => api.getDesktop()?.getState().mode === 'ready' && api.publicState().connection === 'online'); }
   catch (error) { console.error({ desktop: api.getDesktop()?.getState(), device: api.publicState() }); throw error; }
@@ -77,6 +91,11 @@ async function main() {
   console.log('SEPARATE_DEVICE_PROCESS_OK');
   console.log('PAIRING_IDENTITY_PRESERVED_OK');
   const desktop = api.getDesktop();
+  assert.equal(earlyClosed,true,'fixture must really close the first workspace during startup');
+  assert.equal(desktop.win.isVisible(),false,'startup must not show a workspace that the user already closed');
+  await api.showDesktop(); // An explicit later wake still reopens it.
+  assert.equal(desktop.win.isVisible(),true);
+  console.log('COLD_START_CLOSE_IS_NOT_UNDONE_WHEN_INITIAL_LOAD_COMPLETES_OK');
   const remote = desktop.getView().webContents;
   assert.deepEqual(await remote.executeJavaScript('[typeof require, typeof process, typeof metis, typeof metisDesktop]'),
     ['undefined', 'undefined', 'undefined', 'undefined']);
@@ -216,8 +235,27 @@ async function main() {
   }
   console.log('REAL_SECOND_PROCESS_OPENS_NEW_WINDOW_AND_PRESERVES_CONNECTION_OK');
   const activation=require('../src/main/window-activation.cjs');
-  const testListener=process.platform==='win32'?null:activation.listenForWindowActivation({directory,activate:()=>api.showDesktop()});
+  const testListener=process.platform==='win32'?null:activation.listenForWindowActivation({directory,activate:()=>api.showDesktop({preferVisible:true})});
   try{
+    // The native launch has completed. Routing to an existing server can
+    // select the hidden original without showing it; simulate that stale selection.
+    const foreground=desktop.activeWindow;
+    const visible=()=>desktop.getWindows().filter(entry=>!entry.win.isDestroyed()&&entry.win.isVisible());
+    assert.deepEqual(visible(),[foreground]);
+    const original=await desktop.openServer(server);
+    assert.equal(original.getView().webContents,remote);
+    assert.equal(original.win.isVisible(),false);
+    const shown=[], originalShow=desktop.show;
+    desktop.show=async (...args)=>{const entry=await originalShow.apply(desktop,args);shown.push(entry);return entry;};
+    try{
+      fs.writeFileSync(path.join(directory,activation.REQUEST_FILE),'ignored untrusted contents');
+      await waitFor(()=>shown.length>0);
+      assert.equal(shown[0].win.id,foreground.win.id,'late show must select the visible workspace');
+      assert.equal(original.win.isVisible(),false,'late show must not reveal the hidden workspace');
+      assert.deepEqual(visible(),[foreground]);
+      await command('late-activation-signal');assert.equal(authentications,1);
+      console.log('LATE_LEGACY_SHOW_PRESERVES_ONE_VISIBLE_WORKSPACE_OK');
+    }finally{desktop.show=originalShow;}
     const closing=desktop.activeWindow;closing.win.close();await waitFor(()=>closing.win.isDestroyed()||!closing.win.isVisible());
     // This channel has only one effect: show the same window. Its contents are
     // deliberately not trusted as commands or navigation parameters.

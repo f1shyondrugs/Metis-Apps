@@ -56,9 +56,14 @@ if ($windowHandle -eq 0) {
 }
 Write-Output 'WINDOWS_INSTALLED_APP_LAUNCH_OK'
 if (-not [MetisOwnWindows]::Close([int]$process.Id,$windowHandle)) { throw 'Could not close the owned test app window.' }
-Start-Sleep -Milliseconds 500
-$process.Refresh()
-if ($process.HasExited) { throw 'Closing the main window stopped background operation.' }
+$deadline = (Get-Date).AddSeconds(8)
+do {
+  Start-Sleep -Milliseconds 50
+  $process.Refresh()
+  if ($process.HasExited) { throw 'Closing the main window stopped background operation.' }
+  $hiddenCount = [MetisOwnWindows]::Count([int]$process.Id)
+} until ($hiddenCount -eq 0 -or (Get-Date) -gt $deadline)
+if ($hiddenCount -ne 0) { throw 'The original workspace did not close to the background.' }
 $originalPid=$process.Id
 $receipt = Join-Path $env:RUNNER_TEMP 'metis-second-launch.json'
 & node (Join-Path $PSScriptRoot 'spawn-installed.cjs') $exe (Join-Path $env:RUNNER_TEMP 'metis-second.stdout.log') (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log') $receipt $renderArguments
@@ -99,6 +104,20 @@ if($second.ExitCode -ne 0){
  throw ("Second launcher failed: exit='" + $second.ExitCode + "', exited=" + $second.HasExited)
 }
 if($process.Id -ne $originalPid){throw 'Reopening replaced the background process.'}
+if ($reopenedHandle -eq $windowHandle) { throw 'Native second launch did not create a new workspace.' }
+$completed = @(Get-Content $stderr | Select-String -SimpleMatch 'METIS_STARTUP legacy-show-completed').Count
+[IO.File]::WriteAllText((Join-Path $env:METIS_DESKTOP_TEST_DATA 'show-main-window.request'), 'show')
+$deadline = (Get-Date).AddSeconds(8)
+do {
+  Start-Sleep -Milliseconds 50
+  $observed = @(Get-Content $stderr | Select-String -SimpleMatch 'METIS_STARTUP legacy-show-completed').Count
+} until ($observed -gt $completed -or (Get-Date) -gt $deadline)
+if ($observed -le $completed) { throw 'Installed app did not acknowledge the late show-only request.' }
+if ([MetisOwnWindows]::Count([int]$process.Id) -ne 1 -or [MetisOwnWindows]::Find([int]$process.Id) -ne $reopenedHandle) {
+  [MetisOwnWindows]::Describe([int]$process.Id) | Write-Output
+  throw 'Late show request changed the visible workspace set.'
+}
+Write-Output 'WINDOWS_INSTALLED_LATE_LEGACY_SHOW_PRESERVES_ONE_WORKSPACE_OK'
 Write-Output 'WINDOWS_INSTALLED_CLOSE_AND_SECOND_LAUNCH_REOPEN_OK'
 Stop-Process -Id $process.Id
 Write-Output 'WINDOWS_BACKGROUND_CLOSE_OK'
