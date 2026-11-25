@@ -69,7 +69,7 @@ jobs:
         run: |
           archive="$GITHUB_WORKSPACE/desktop/dist/mac-arm64/Metis.app/Contents/Resources/app.asar"
           test -f "$archive"
-          env -i PATH="$PATH" HOME="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" SHELL=/bin/zsh TERM=xterm-256color METIS_TEST_MAC_HISTORY=1 node desktop/tests/terminal-history.cjs "$archive"
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" SHELL=/bin/zsh TERM=xterm-256color METIS_TEST_MAC_HISTORY=1 node --preserve-symlinks desktop/tests/terminal-history.cjs "$archive"
       - name: Verify Windows install, background operation and uninstall
         if: matrix.platform == 'windows'
         shell: pwsh

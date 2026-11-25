@@ -118,6 +118,9 @@ async function run(){
  assert.equal(await local.executeJavaScript('document.getElementById("connect").form===document.getElementById("form")'),true);
  await local.executeJavaScript('document.getElementById("server").value='+JSON.stringify(server)+';document.getElementById("connect").click()');
  await wait(()=>desktop.getState().mode==="ready");
+ // The replacement view is ready before the retired WebContents always
+ // reports native destruction. Wait for that lifecycle event as well.
+ await wait(()=>local.isDestroyed());
  assert.equal(local.isDestroyed(),true,"Retired splash must be destroyed after handoff");assert.equal(desktop.win.isMenuBarVisible(),true);console.log("FRAMED_WORKSPACE_HANDOFF_WITHOUT_VIEW_RELOAD_OK");
  assert.equal(initialRequests,1,"Framing handoff must not reload the server page");let contents=desktop.getView().webContents;
  assert.match(await contents.executeJavaScript("document.body.textContent"),/Fresh Metis server setup/);

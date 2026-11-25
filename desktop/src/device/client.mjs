@@ -246,9 +246,11 @@ export function startRemoteClient({ config: suppliedConfig, configPath, onEvent 
         // Keep the configured shell and the existing pairing identity. Shells
         // such as zsh and cmd need a terminal to handle editing/history keys.
         const windows = process.platform === "win32";
-        // Native helper workers must be loaded from a physical installed path.
-        const entry = createRequire(import.meta.url).resolve("node-pty");
-        const { default: pty } = await import(unpackedHref(pathToFileURL(entry)));
+        const entry = pathToFileURL(createRequire(import.meta.url).resolve("node-pty"));
+        // Windows workers need a physical path. On macOS node-pty's Unix
+        // loader redirects its spawn-helper itself, so keep the virtual ASAR
+        // path here or it would append ".unpacked" a second time.
+        const { default: pty } = await import(windows ? unpackedHref(entry) : entry.href);
         if (stopped) throw new Error("The device connection was closed.");
         const terminal = pty.spawn(terminalShell(), windows ? [] : ["-i"], {
           cwd, env: process.env, name: "xterm-256color", cols: 80, rows: 24,
