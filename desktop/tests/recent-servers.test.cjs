@@ -13,6 +13,8 @@ function fixture(t, saved) {
 }
 test('fresh profile has no fabricated history and legacy URL is not listed before verification', t => {
   const fresh = fixture(t);
+  assert.equal(fresh.history.getCurrent(), null);
+  assert.equal(fresh.history.hasCurrent(), false);
   assert.deepEqual(fresh.history.list(), []);
   assert.equal(fs.existsSync(fresh.configPath), false);
   const legacy = fixture(t, { url: 'https://EXAMPLE.com:443/' });

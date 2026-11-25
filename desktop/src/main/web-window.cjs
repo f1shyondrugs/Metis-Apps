@@ -2,7 +2,7 @@ const { app, BrowserWindow, WebContentsView, Menu, shell, dialog, net } = requir
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const ROOT = path.join(__dirname, '../..');
-const { DEFAULT_SERVER, normalizeServer, sameOrigin, externalUrl } = require(path.join(ROOT, 'policy.cjs'));
+const { normalizeServer, sameOrigin, externalUrl } = require(path.join(ROOT, 'policy.cjs'));
 const APP_ID = process.env.METIS_DESKTOP_TEST_DATA ? 'ai.metis.desktop.test' : 'ai.metis.desktop';
 const { registerWebPermissions } = require('./web-permissions.cjs');
 const { verifyMetisServer } = require('./server-verification.cjs');
@@ -11,7 +11,7 @@ const shellPath = path.join(ROOT, 'ui', 'index.html');
 const shellUrl = pathToFileURL(shellPath).href;
 
 async function createDesktopWindow({ recentServers, registerHandlers, onChanged = () => {}, onFocus = () => {}, onClosed = () => {}, onNewWindow = () => {}, onOpenUrl, navigationUrl, onDevices = () => {}, onDeviceState = () => ({}), onAssistant = () => {}, onShortcutsChange = () => {}, onShortcutCapture = () => {}, onCaptureHidden, onAutostart, onCheckUpdates, onDesktopPermissions, shouldHide = () => false, initialServer } = {}) {
-  let server = initialServer ? normalizeServer(initialServer) : DEFAULT_SERVER;
+  let server = initialServer ? normalizeServer(initialServer) : null;
   let serverConfigured=Boolean(initialServer);
   let api, menu;
   let context;
@@ -68,6 +68,7 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
   };
   const settings = () => { disposeView(); update('settings'); };
   async function load() {
+    if (!server) return;
     disposeView();
     update('loading');
     const currentGeneration = generation;

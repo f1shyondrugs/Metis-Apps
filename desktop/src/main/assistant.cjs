@@ -75,7 +75,9 @@ function createAssistant({
   }
   async function open(initialGesture) {
     if (opening) return opening;
-    const next = normalizeServer(getServer());
+    const target = getServer();
+    if (!target) return;
+    const next = normalizeServer(target);
     if (win && !win.isDestroyed() && next !== server) { close(); win.destroy(); win = null; }
     const created = !win || win.isDestroyed();
     autoFocusPending = !visible;

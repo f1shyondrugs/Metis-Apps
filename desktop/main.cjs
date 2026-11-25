@@ -16,7 +16,6 @@ const { pathToFileURL } = require("node:url");
 
 const APP_NAME = "Metis";
 const { createDesktop } = require("./src/main/web-window.cjs");
-const { DEFAULT_SERVER } = require("./policy.cjs");
 const { pairingOrigin, enroll, fetchPairingSnapshot } = require("./src/main/device-pairing.cjs");
 const { createAdminController, attachAdminRuntime } = require("./src/device/admin-controller.cjs");
 const { serverArgument } = require("./src/main/recent-servers.cjs");
@@ -873,12 +872,12 @@ if(process.platform==="win32"){
     }
     computerUseOverlay = createComputerUseOverlay({ BrowserWindow, screen, globalShortcut, onCancel: cancelComputerUse, hideFromCapture: overlayPreferences.get(), cancelShortcut: overlayPreferences.getCancelShortcut() });
     annotationOverlay = require('./src/main/annotation-overlay.cjs').createAnnotationOverlay({
-      BrowserWindow, screen, ipcMain, getServer: () => annotationOwner?.origin || desktop?.getState().server || DEFAULT_SERVER,
+      BrowserWindow, screen, ipcMain, getServer: () => annotationOwner?.origin || desktop?.getState().server || null,
       appearance: currentAppearance, hideFromCapture: overlayPreferences.get(), onChange: () => { lastTrayKey = ''; updateTray(); }
     });
     const { createAssistant } = require("./src/main/assistant.cjs");
     assistant = createAssistant({
-      getServer: () => desktop?.getState().server || primarySession()?.origin || DEFAULT_SERVER,
+      getServer: () => desktop?.getState().server || primarySession()?.origin || null,
       getDevice: server => {
         const session = sessionFor(server);
         return { clientId: session?.status.accessMismatch ? "" : session?.config?.clientId || "", hostname: os.hostname(), platform: process.platform, version: app.getVersion() };

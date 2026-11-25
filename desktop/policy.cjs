@@ -1,4 +1,3 @@
-const DEFAULT_SERVER = 'https://ai.f1shy312.com/';
 function normalizeServer(value) {
   if (typeof value !== 'string' || value.length > 2048) throw new Error('Enter a valid server address.');
   let url;
@@ -19,4 +18,4 @@ function externalUrl(candidate) {
     return ['https:', 'http:', 'mailto:'].includes(url.protocol) && !url.username && !url.password;
   } catch { return false; }
 }
-module.exports = { DEFAULT_SERVER, normalizeServer, sameOrigin, externalUrl };
+module.exports = { normalizeServer, sameOrigin, externalUrl };

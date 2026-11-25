@@ -22,7 +22,7 @@ async function run(){
  let permissionCalls=0;
  desktop=await createDesktop({onDesktopPermissions:async()=>{permissionCalls++;return {available:false,reason:"Synthetic OS status"};}});
  await desktop.initialLoad;
- assert.equal(desktop.getState().mode,"welcome");assert.equal(desktop.getView(),undefined);
+ assert.equal(desktop.getState().mode,"welcome");assert.equal(desktop.getState().server,null);assert.equal(desktop.getView(),undefined);
  // macOS has a global application menu, not a per-window menu bar.
  if(process.platform!=="darwin")assert.equal(desktop.win.isMenuBarVisible(),false);console.log("FRAMELESS_NATIVE_SPLASH_OK");
  const local=desktop.win.webContents;
@@ -99,6 +99,13 @@ async function run(){
  await captureSeries(local,"step");
  await wait(()=>desktop.win.webContents.executeJavaScript('document.getElementById("form").hidden===false'));
  assert.equal(await local.executeJavaScript('document.activeElement.id'),"server");
+ assert.equal(await local.executeJavaScript('document.getElementById("server").value'),"");
+ await desktop.load();
+ assert.equal(desktop.getState().mode,"settings");
+ assert.equal(desktop.getView(),undefined);
+ assert.equal(initialRequests,0);
+ assert.equal(fs.existsSync(path.join(root,"server.json")),false);
+ console.log("FRESH_DESKTOP_NO_DEFAULT_OR_NETWORK_OK");
  console.log("NATIVE_FADE_STEP_AND_INPUT_FOCUS_OK");
  const invalid=await local.executeJavaScript('metisDesktop.connect("https://user:password@example.invalid/")');assert.equal(invalid.ok,false);
  assert.equal(await local.executeJavaScript('document.getElementById("connect").form===document.getElementById("form")'),true);

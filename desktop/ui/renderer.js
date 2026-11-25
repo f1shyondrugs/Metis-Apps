@@ -11,7 +11,7 @@ function paint(state){
  byId("welcome").hidden=state.mode!=="welcome";byId("form").hidden=state.mode!=="settings";byId("form-buttons").hidden=state.mode!=="settings";
  byId("exit-replay").hidden=!replay;byId("replay-actions").hidden=!replay||state.mode!=="loading";
  byId("actions").hidden=Boolean(replay)||!["loading","error"].includes(state.mode);byId("retry").hidden=state.mode==="loading";
- byId("server-label").textContent=state.mode==="welcome"?"":state.server;
+ byId("server-label").textContent=state.mode==="welcome"?"":(state.server??"");
  byId("heading").textContent=state.mode==="welcome"?"Welcome to Metis":state.mode==="settings"?"Connect to your Metis.":state.mode==="error"?"Connection interrupted.":"Opening your workspace.";
  byId("description").textContent=state.mode==="welcome"?"Your workspace. Your way.":state.mode==="settings"?"Enter your Metis server address.":state.mode==="error"?state.message:"Sign-in or first-time setup opens next.";
  if(replay){
@@ -22,7 +22,7 @@ function paint(state){
   if(state.mode==="welcome")byId("begin").focus();
  }
  for(const li of document.querySelectorAll("#progress li")){li.removeAttribute("aria-current");if(li.dataset.step===(["error","ready"].includes(state.mode)?"loading":state.mode))li.setAttribute("aria-current","step");}
- if(state.mode==="settings"&&previous?.mode!=="settings"){byId("server").value=state.server;byId("validation").textContent="";byId("server").focus();}
+ if(state.mode==="settings"&&previous?.mode!=="settings"){byId("server").value=state.server??"";byId("validation").textContent="";byId("server").focus();}
 }
 function render(state){
  pending=state;

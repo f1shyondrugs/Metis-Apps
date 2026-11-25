@@ -1,8 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeServer, sameOrigin, externalUrl, DEFAULT_SERVER } = require('../policy.cjs');
+const { normalizeServer, sameOrigin, externalUrl } = require('../policy.cjs');
 test('public and custom HTTPS servers, local development', () => {
-  assert.equal(normalizeServer(DEFAULT_SERVER), DEFAULT_SERVER);
   assert.equal(normalizeServer(' https://example.com '), 'https://example.com/');
   assert.equal(normalizeServer('http://127.0.0.1:3000'), 'http://127.0.0.1:3000/');
   assert.equal(normalizeServer('http://[::1]:3000'), 'http://[::1]:3000/');

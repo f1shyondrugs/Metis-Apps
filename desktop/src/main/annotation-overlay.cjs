@@ -79,7 +79,7 @@ function createAnnotationOverlay({BrowserWindow,screen,ipcMain,getServer,appeara
   }
   async function execute(params, server = getServer()){
     const requestedEpoch=epoch;
-    server = normalizeServer(server);
+    if (params.operation !== 'status') server = normalizeServer(server);
     const run=async()=>{
       if(requestedEpoch!==epoch)throw Error('Overlay request cancelled by clear');
       if(destroyed)throw Error('Overlay closed');sync();

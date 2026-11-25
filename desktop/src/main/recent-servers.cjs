@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
-const { DEFAULT_SERVER, normalizeServer } = require('../../policy.cjs');
+const { normalizeServer } = require('../../policy.cjs');
 
 const ID = /^[a-f0-9]{24}$/;
 const idFor = url => createHash('sha256').update(url).digest('hex').slice(0, 24);
@@ -49,7 +49,7 @@ function createRecentServers({ configPath, initialServer } = {}) {
   }
 
   return {
-    getCurrent: () => current || DEFAULT_SERVER,
+    getCurrent: () => current,
     hasCurrent: () => Boolean(current),
     list: () => history.map(url => ({ id: idFor(url), url, label: labelFor(url) })),
     resolve(id) {
