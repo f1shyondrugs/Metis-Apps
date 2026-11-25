@@ -250,6 +250,15 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
       click: () => { if (win.isMinimized()) win.restore(); win.show(); win.focus(); switchServer(entry.id); }
     })) : [{ label: 'No recent servers', enabled: false }];
   }
+  function toggleDeveloperTools() {
+    if (win.isDestroyed()) return;
+    const remote = view?.webContents;
+    const target = state.mode === 'ready' && remote && !remote.isDestroyed() && sameOrigin(remote.getURL(), server)
+      ? remote : win.webContents;
+    if (target.isDestroyed()) return;
+    if (target.isDevToolsOpened()) target.closeDevTools();
+    else target.openDevTools({ mode: 'detach' });
+  }
   function refreshMenu() {
   menu = Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
@@ -270,7 +279,9 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
       { role: 'togglefullscreen', label: 'Full screen' },
       { role: 'resetZoom', label: 'Actual size' },
       { role: 'zoomIn', label: 'Zoom in' },
-      { role: 'zoomOut', label: 'Zoom out' }
+      { role: 'zoomOut', label: 'Zoom out' },
+      { type: 'separator' },
+      { id: 'metis-developer-tools', label: 'Developer Tools', accelerator: 'CmdOrCtrl+Shift+I', registerAccelerator: !launcher, click: toggleDeveloperTools }
     ] }
   ]);
   }
@@ -280,9 +291,26 @@ async function createDesktopWindow({ recentServers, registerHandlers, onChanged 
   function bindWindow(host) {
     host.webContents.on('will-navigate', event => event.preventDefault());
     host.webContents.setWindowOpenHandler(() => ({action:'deny'}));
+    // The setup and connection-error shell can be frameless, with no menu.
+    host.webContents.on('before-input-event', (event, input) => {
+      if (host !== win || !launcher || input.type !== 'keyDown' || input.isAutoRepeat) return;
+      const shortcut = process.platform === 'darwin' ? input.meta && !input.control : input.control && !input.meta;
+      if (!shortcut || !input.shift || input.alt || String(input.key).toLowerCase() !== 'i') return;
+      event.preventDefault();
+      toggleDeveloperTools();
+    });
     host.on('resize', resize);
     host.on('focus', () => { if(api)onFocus(api); });
-    host.on('close', event => { if (shouldHide()) { event.preventDefault(); host.hide(); } });
+    host.on('close', event => {
+      if (!shouldHide()) return;
+      event.preventDefault();
+      if (host === win) {
+        for (const contents of [host.webContents, view?.webContents]) {
+          if (contents && !contents.isDestroyed() && contents.isDevToolsOpened()) contents.closeDevTools();
+        }
+      }
+      host.hide();
+    });
     host.on('closed', () => {
       if (host !== win) return; // Retiring the splash must not close the app view.
       dropCleanup(); disposeView();

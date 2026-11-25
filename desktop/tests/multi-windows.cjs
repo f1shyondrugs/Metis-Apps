@@ -34,6 +34,15 @@ async function main(){
   await second.getView().webContents.executeJavaScript('document.querySelector("#draft").value="Window B draft";metisApp.openDeviceSettings()');
   await wc.executeJavaScript('metisApp.setOverlayCaptureHidden(true)');
   assert.equal(settings,1);assert.equal(mode,true);
+  // Explicit native tools action inspects its own embedded renderer and no other window.
+  const otherContents=second.getView().webContents;
+  first.getMenu().getMenuItemById('metis-developer-tools').click();
+  await waitFor(()=>wc.isDevToolsOpened());
+  assert.equal(otherContents.isDevToolsOpened(),false);
+  assert.equal(first.win.webContents.isDevToolsOpened(),false);
+  first.getMenu().getMenuItemById('metis-developer-tools').click();
+  await waitFor(()=>!wc.isDevToolsOpened());
+  console.log('NATIVE_DEVELOPER_TOOLS_TARGET_ONLY_OWN_WORKSPACE_OK');
   // Each native menu remains bound to its own window, even when another window is active.
   first.getMenu().getMenuItemById('metis-server-'+bid).click();
   await waitFor(()=>first.getState().mode==='ready'&&first.getState().server===b);

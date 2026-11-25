@@ -106,6 +106,13 @@ async function run(){
  assert.equal(initialRequests,0);
  assert.equal(fs.existsSync(path.join(root,"server.json")),false);
  console.log("FRESH_DESKTOP_NO_DEFAULT_OR_NETWORK_OK");
+ let consumed=false;
+ local.emit("before-input-event",{preventDefault(){consumed=true;}},{type:"keyDown",key:"I",shift:true,meta:process.platform==="darwin",control:process.platform!=="darwin"});
+ assert.equal(consumed,true);
+ await wait(()=>local.isDevToolsOpened());
+ assert.equal(desktop.getView(),undefined);
+ local.closeDevTools();await wait(()=>!local.isDevToolsOpened());local.focus();
+ console.log("NATIVE_SETUP_DEVELOPER_TOOLS_SHORTCUT_OK");
  console.log("NATIVE_FADE_STEP_AND_INPUT_FOCUS_OK");
  const invalid=await local.executeJavaScript('metisDesktop.connect("https://user:password@example.invalid/")');assert.equal(invalid.ok,false);
  assert.equal(await local.executeJavaScript('document.getElementById("connect").form===document.getElementById("form")'),true);
