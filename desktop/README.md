@@ -62,6 +62,8 @@ npm run build:mac -- --publish never
 npm run build:linux -- --publish never
 ```
 
+On Linux, a new device terminal uses Bash when the desktop session does not supply `SHELL` and Bash is installed. The terminal then supports Up/Down history. An explicitly configured shell and non-interactive command execution are unchanged.
+
 Linux Electron integration tests need a graphical session, e.g. `xvfb-run -a npm run test:e2e` on CI. Packaged Linux launch preflight refuses root/headless startup and reports missing libraries. Linux Computer Use needs X11, xdotool, wmctrl and ImageMagick.
 
 The Electron suites use temporary data directories and local HTTP/WebSocket fixtures. They exercise server/session persistence, isolation, offline recovery, preserved pairing, separate device process and commands during renderer reload/window closure. They never borrow production credentials. `METIS_DESKTOP_TEST_DATA` selects an isolated local app-data directory for manual testing.

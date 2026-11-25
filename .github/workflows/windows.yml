@@ -60,7 +60,9 @@ jobs:
         if: matrix.platform == 'linux'
         env:
           METIS_NATIVE_TEST_ARCHIVE: ${{ github.workspace }}/desktop/dist/linux-unpacked/resources/app.asar
-        run: xvfb-run -a desktop/node_modules/.bin/electron desktop/tests/native-modules.cjs
+        run: |
+          xvfb-run -a desktop/node_modules/.bin/electron desktop/tests/native-modules.cjs
+          env -u SHELL -u TERM node desktop/tests/terminal-history.cjs "$METIS_NATIVE_TEST_ARCHIVE"
       - name: Verify Windows install, background operation and uninstall
         if: matrix.platform == 'windows'
         shell: pwsh

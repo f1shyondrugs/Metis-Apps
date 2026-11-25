@@ -13,6 +13,20 @@ import { createNotificationReceiver } from "./notification-client.mjs";
 const execFileAsync = promisify(execFile);
 const shell = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : (process.env.SHELL || "/bin/sh");
 
+function terminalShell() {
+  // Linux GUI launches do not always provide SHELL. On Debian/Ubuntu, /bin/sh
+  // is usually dash, which consumes arrow escape sequences as literal input.
+  if (process.platform === "linux" && !process.env.SHELL) {
+    for (const candidate of ["/bin/bash", "/usr/bin/bash"]) {
+      try {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch {}
+    }
+  }
+  return shell;
+}
+
 export function startRemoteClient({ config: suppliedConfig, configPath, onEvent = () => {}, desktopGuiAvailable = () => false, nativeNotificationsAvailable = () => false, overlayAnnotationsAvailable = () => false, showNotification, logEvent, receiveNotification: suppliedNotificationReceiver } = {}) {
   const resolvedPath = configPath || process.env.METIS_REMOTE_CLIENT_CONFIG ||
     path.join(os.homedir(), ".metis-ai", "remote-client.json");
@@ -221,9 +235,9 @@ export function startRemoteClient({ config: suppliedConfig, configPath, onEvent 
       return { path: file, deleted: true };
     }
     if (action === "pty_open") {
-      const child = spawn(shell, process.platform === "win32" ? [] : ["-i"], {
+      const child = spawn(terminalShell(), process.platform === "win32" ? [] : ["-i"], {
         cwd: typeof params.cwd === "string" ? params.cwd : os.homedir(),
-        env: process.env,
+        env: process.platform === "linux" && !process.env.TERM ? { ...process.env, TERM: "xterm-256color" } : process.env,
         stdio: "pipe",
         windowsHide: true,
       });
