@@ -67,6 +67,20 @@ async function main() {
   });
   const original = fs.readFileSync(configFile);
   fs.writeFileSync(path.join(directory, 'server.json'), JSON.stringify({ url: server }));
+  // The first native host is visible before the application finishes adopting
+  // it. Close that real window during the asynchronous startup handoff.
+  let earlyClosed=false;
+  const windowModule=require('../src/main/web-window.cjs');
+  const createHost=windowModule.createDesktopWindow;
+  windowModule.createDesktopWindow=async options=>{
+    windowModule.createDesktopWindow=createHost;
+    const entry=await createHost(options);
+    assert.equal(entry.win.isVisible(),true);
+    entry.win.close();
+    await waitFor(()=>!entry.win.isDestroyed()&&!entry.win.isVisible());
+    earlyClosed=true;
+    return entry;
+  };
   const api = require('../main.cjs');
   try { await waitFor(() => api.getDesktop()?.getState().mode === 'ready' && api.publicState().connection === 'online'); }
   catch (error) { console.error({ desktop: api.getDesktop()?.getState(), device: api.publicState() }); throw error; }
@@ -77,6 +91,11 @@ async function main() {
   console.log('SEPARATE_DEVICE_PROCESS_OK');
   console.log('PAIRING_IDENTITY_PRESERVED_OK');
   const desktop = api.getDesktop();
+  assert.equal(earlyClosed,true,'fixture must really close the first workspace during startup');
+  assert.equal(desktop.win.isVisible(),false,'startup must not show a workspace that the user already closed');
+  await api.showDesktop(); // An explicit later wake still reopens it.
+  assert.equal(desktop.win.isVisible(),true);
+  console.log('COLD_START_CLOSE_IS_NOT_UNDONE_WHEN_INITIAL_LOAD_COMPLETES_OK');
   const remote = desktop.getView().webContents;
   assert.deepEqual(await remote.executeJavaScript('[typeof require, typeof process, typeof metis, typeof metisDesktop]'),
     ['undefined', 'undefined', 'undefined', 'undefined']);

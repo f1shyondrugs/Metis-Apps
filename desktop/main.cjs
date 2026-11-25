@@ -29,6 +29,9 @@ async function showDesktop({ preferVisible = false } = {}) {
     desktopOpening ||= createDesktop({ initialServer: primarySession()?.config?.server, initialServerId: serverArgument(process.argv), onDevices: showWindow, onDeviceState: publicState, onAssistant: () => assistant?.open(), onShortcutsChange: setDesktopShortcuts, onShortcutCapture: value => assistant?.pauseShortcuts(value), onCaptureHidden: setOverlayCaptureHidden, onAutostart: setAutostart, onCheckUpdates: checkUpdates, onDesktopPermissions: async () => {await desktopPermissionStatus(true);await probeDesktop();return { desktopAvailable: status.desktopAvailable, desktopReason: status.desktopReason, platform: process.platform };}, shouldHide: () => !quitting && (!desktop || desktop.getWindows().length <= 1) })
       .then(value => { desktop = value; return value; }).finally(() => { desktopOpening = null; });
     await desktopOpening;
+    // Creating the native window already presents it. A Close delivered
+    // while its shell loads must stay in effect after the async handoff.
+    return;
   }
   await desktop.show({ preferVisible });
 }
