@@ -9,7 +9,7 @@ const [exe,out,err,receipt,...input]=process.argv.slice(2);
 assert.equal(path.basename(exe),'Metis AI Remote Client.exe');
 for(const file of [exe,out,err,receipt])assert.ok(path.resolve(file).toLowerCase().startsWith(path.resolve(process.env.RUNNER_TEMP).toLowerCase()+path.sep));
 const args=input.flatMap(value=>value.split(' ')).filter(Boolean);
-for(const arg of args)assert.ok(['--disable-gpu','--disable-software-rasterizer','--in-process-gpu'].includes(arg));
+for(const arg of args)assert.ok(['--disable-gpu','--disable-software-rasterizer','--in-process-gpu','--force-renderer-accessibility'].includes(arg));
 const stdout=fs.openSync(out,'w'),stderr=fs.openSync(err,'w');
 const child=spawn(exe,args,{env:{...process.env},stdio:['ignore',stdout,stderr],windowsHide:false,detached:true});
 child.once('error',error=>{console.error(error);process.exitCode=1;});

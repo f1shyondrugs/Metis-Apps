@@ -5,7 +5,23 @@ if (-not [MetisOwnWindows]::IsWorkspaceTitle('Metis') -or -not [MetisOwnWindows]
 Write-Output 'WINDOWS_WORKSPACE_TITLE_CLASSIFIER_OK'
 $expectedVersion = (Get-Content (Join-Path $PSScriptRoot '..\package.json') -Raw | ConvertFrom-Json).version
 if (-not $env:RUNNER_TEMP) { throw 'Installer smoke test is restricted to an isolated CI runner.' }
-$installer = Get-ChildItem (Join-Path $PSScriptRoot '..\dist') -Filter 'Metis-AI-Remote-Client-Setup.exe' | Select-Object -First 1
+$publishedAudit = $env:METIS_RELEASE_PAIRING_SMOKE -eq 'v1.7.31'
+if ($publishedAudit) {
+  if ($expectedVersion -ne '1.7.31') { throw 'Published audit source version drifted.' }
+  $installer = Get-Item (Join-Path $env:RUNNER_TEMP 'metis-v131-release\Metis-AI-Remote-Client-Setup.exe')
+  $stream = [IO.File]::OpenRead($installer.FullName)
+  $sha256 = [Security.Cryptography.SHA256]::Create()
+  try {
+    $digest = [BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $stream.Dispose()
+    $sha256.Dispose()
+  }
+  if ($digest -ne '6c9be7bd4103b16d2910963acaea836ad964fdeef9e13e930065f23c5d8e1a7f') { throw 'Published installer bytes do not match the approved Release asset.' }
+  Write-Output 'MET77_RELEASED_INSTALLER_SHA256_OK'
+} else {
+  $installer = Get-ChildItem (Join-Path $PSScriptRoot '..\dist') -Filter 'Metis-AI-Remote-Client-Setup.exe' | Select-Object -First 1
+}
 if (-not $installer) { throw 'Installer missing.' }
 $installDir = Join-Path $env:RUNNER_TEMP 'Metis Installer Test'
 Start-Process -FilePath $installer.FullName -ArgumentList "/S /currentuser /D=$installDir" -Wait
@@ -27,6 +43,13 @@ foreach ($shortcut in $shortcutPaths) {
 Write-Output 'WINDOWS_INSTALL_REGISTRATION_OK'
 & node (Join-Path $PSScriptRoot 'verify-split-asar.cjs') (Join-Path $installDir 'resources\\app.asar')
 if ($LASTEXITCODE -ne 0) { throw 'Installed background host source verification failed.' }
+$pairingFailure = $null
+if ($publishedAudit) {
+  # Pair on the very first launch. Still run the independent lifecycle checks
+  # and fail the audit if first pairing or those checks fail.
+  try { & (Join-Path $PSScriptRoot 'installer-pairing-smoke.ps1') -Exe $exe }
+  catch { $pairingFailure = $_; Write-Output ('MET77_FIRST_PAIRING_FAILED: ' + $_.Exception.Message) }
+}
 $env:METIS_DESKTOP_TEST_DATA = Join-Path $env:RUNNER_TEMP 'metis-installer-data'
 $stdout = Join-Path $env:RUNNER_TEMP 'metis-installed-startup.stdout.log'
 $stderr = Join-Path $env:RUNNER_TEMP 'metis-installed-startup.stderr.log'
@@ -112,3 +135,4 @@ while (((Test-Path $exe) -or (Test-Path $uninstallKey)) -and (Get-Date) -lt $dea
 if ((Test-Path $exe) -or (Test-Path $uninstallKey)) { throw 'Uninstall did not remove app or Windows registration.' }
 foreach ($shortcut in $shortcutPaths) { if (Test-Path $shortcut) { throw "Uninstall left shortcut: $shortcut" } }
 Write-Output 'WINDOWS_UNINSTALL_OK'
+if ($pairingFailure) { throw $pairingFailure }
