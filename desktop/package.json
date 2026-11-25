@@ -1,6 +1,6 @@
 {
   "name": "metis-ai-remote-client",
-  "version": "1.7.34",
+  "version": "1.7.35",
   "private": true,
   "description": "Metis desktop app with integrated device connection",
   "main": "bootstrap.cjs",
@@ -110,6 +110,7 @@
       "uninstallDisplayName": "Metis"
     },
     "mac": {
+      "asarUnpack": ["**/node_modules/node-pty/**"],
       "target": [
         {
           "target": "dmg",

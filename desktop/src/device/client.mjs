@@ -242,14 +242,18 @@ export function startRemoteClient({ config: suppliedConfig, configPath, onEvent 
         running.delete(sessionId);
         send({ type: "event", sessionId, event: "exit", code });
       };
-      if (process.platform === "win32") {
-        // Keep cmd.exe and the existing pairing identity, but attach a console
-        // so the shell handles editing/history instead of reading arrow bytes.
+      if (process.platform === "win32" || process.platform === "darwin") {
+        // Keep the configured shell and the existing pairing identity. Shells
+        // such as zsh and cmd need a terminal to handle editing/history keys.
+        const windows = process.platform === "win32";
         // Native helper workers must be loaded from a physical installed path.
         const entry = createRequire(import.meta.url).resolve("node-pty");
         const { default: pty } = await import(unpackedHref(pathToFileURL(entry)));
         if (stopped) throw new Error("The device connection was closed.");
-        const terminal = pty.spawn(shell, [], { cwd, env: process.env, name: "xterm-256color", cols: 80, rows: 24, useConpty: true });
+        const terminal = pty.spawn(terminalShell(), windows ? [] : ["-i"], {
+          cwd, env: process.env, name: "xterm-256color", cols: 80, rows: 24,
+          ...(windows ? { useConpty: true } : {}),
+        });
         running.set(sessionId, { write: data => terminal.write(data), kill: () => terminal.kill() });
         terminal.onData(data => send({ type: "event", sessionId, event: "stdout", data }));
         terminal.onExit(({ exitCode }) => complete(exitCode));

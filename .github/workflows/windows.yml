@@ -63,6 +63,13 @@ jobs:
         run: |
           xvfb-run -a desktop/node_modules/.bin/electron desktop/tests/native-modules.cjs
           env -u SHELL -u TERM node desktop/tests/terminal-history.cjs "$METIS_NATIVE_TEST_ARCHIVE"
+      - name: Verify packaged macOS ARM device terminal
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          archive="$GITHUB_WORKSPACE/desktop/dist/mac-arm64/Metis.app/Contents/Resources/app.asar"
+          test -f "$archive"
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP" TMPDIR="$RUNNER_TEMP" SHELL=/bin/zsh TERM=xterm-256color METIS_TEST_MAC_HISTORY=1 node desktop/tests/terminal-history.cjs "$archive"
       - name: Verify Windows install, background operation and uninstall
         if: matrix.platform == 'windows'
         shell: pwsh
