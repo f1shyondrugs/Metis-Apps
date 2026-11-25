@@ -786,7 +786,8 @@ function setupUpdates() {
   updateInterval=setInterval(check,6*60*60*1000);
 }
 
-const { claimDesktopInstance, shouldListenForLegacyWindowActivation } = require("./src/main/reopen.cjs");
+const { claimDesktopInstance, createWindowActivationArbiter } = require("./src/main/reopen.cjs");
+const windowActivation = createWindowActivationArbiter();
 const ownsDesktopInstance=claimDesktopInstance({
  app,platform:process.platform,
  readElevation:()=>{
@@ -828,7 +829,8 @@ if(process.platform==="win32"){
     if(getWindowsElevation()==="user"&&hint?.windowsElevation==="administrator"){
       status.error="The desktop app stays in Standard user mode. Enable the Administrator Remote Client here and confirm Windows UAC.";
       void desktopReady.then(()=>{showWindow();broadcast();});
-    }else void desktopReady.then(async()=>{
+    }else void windowActivation.openNative(async()=>{
+      await desktopReady;
       const id = serverArgument(_argv);
       await desktop.newWindow(id ? {serverId:id} : {});
     }).catch(error=>{status.error=error.message;broadcast();});
@@ -836,10 +838,13 @@ if(process.platform==="win32"){
   app.on("activate", () => { if (installingUpdate || updateWindow.active) void updateWindow.show(); else void showDesktop(); });
   let markDesktopReady;
   const desktopReady = new Promise(resolve => { markDesktopReady = resolve; });
-  const activationListener = shouldListenForLegacyWindowActivation(process.platform, getWindowsElevation())
+  const activationListener = process.platform === "win32"
     ? require("./src/main/window-activation.cjs").listenForWindowActivation({
       directory: userDataDir,
-      activate: () => installingUpdate || updateWindow.active ? updateWindow.show() : desktopReady.then(() => showDesktop()),
+      activate: async () => {
+        await desktopReady;
+        return windowActivation.showLegacy(() => installingUpdate || updateWindow.active ? updateWindow.show() : showDesktop());
+      },
       onError: () => {}, // Native second-instance/tray activation remains available.
     }) : null;
   app.whenReady().then(async () => {

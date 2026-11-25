@@ -1,12 +1,22 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
-const {forwardSecondInstance,claimDesktopInstance,shouldListenForLegacyWindowActivation}=require('../src/main/reopen.cjs');
-test('a Medium Windows primary uses native second-instance events, not the legacy marker', ()=>{
- assert.equal(shouldListenForLegacyWindowActivation('win32','user'),false);
- assert.equal(shouldListenForLegacyWindowActivation('win32','administrator'),true);
- assert.equal(shouldListenForLegacyWindowActivation('win32','unknown'),true);
- assert.equal(shouldListenForLegacyWindowActivation('darwin',null),false);
- assert.equal(shouldListenForLegacyWindowActivation('linux',null),false);
+const {forwardSecondInstance,claimDesktopInstance,createWindowActivationArbiter}=require('../src/main/reopen.cjs');
+test('native reopening suppresses overlapping legacy wakeups but keeps a later standalone wakeup',async()=>{
+ const activation=createWindowActivationArbiter(), calls=[];
+ let finish;
+ const handoff=new Promise(resolve=>{finish=resolve;});
+ const early=activation.showLegacy(()=>assert.fail('old window revealed by queued marker'));
+ const opening=activation.openNative(async()=>{calls.push('new-window');await handoff;});
+ assert.equal(await early,false);
+ assert.equal(await activation.showLegacy(()=>assert.fail('old window revealed during handoff')),false);
+ finish();await opening;
+ assert.equal(await activation.showLegacy(()=>calls.push('standalone-show')),true);
+ assert.deepEqual(calls,['new-window','standalone-show']);
+});
+test('a failed native reopen does not permanently suppress an independent show request',async()=>{
+ const activation=createWindowActivationArbiter();
+ await assert.rejects(activation.openNative(async()=>{throw Error('native failure');}),/native failure/);
+ assert.equal(await activation.showLegacy(()=>{}),true);
 });
 test('a primary claims its lock synchronously without a token probe or readiness',()=>{
  const calls=[];assert.equal(claimDesktopInstance({app:{requestSingleInstanceLock:()=>{calls.push('lock');return true;},whenReady:()=>assert.fail(),exit:()=>assert.fail()},platform:'win32',readElevation:()=>assert.fail(),requestActivation:()=>assert.fail()}),true);assert.deepEqual(calls,['lock']);

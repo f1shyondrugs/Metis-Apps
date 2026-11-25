@@ -24,11 +24,24 @@ function claimDesktopInstance({app,platform,readElevation,requestActivation,onEr
   finally{app.exit(0);}
   return false;
 }
-// Medium-to-Medium launch already delivers Electron's second-instance event.
-// Also acting on the legacy marker can show the old window while the native
-// handler is opening a new one. The secondary still sends the marker for
-// older elevated primaries.
-function shouldListenForLegacyWindowActivation(platform, elevation) {
-  return platform === 'win32' && elevation !== 'user';
+// One launcher may cause both Electron's native event and a legacy show-only
+// marker. Do not reveal the old window while the new window is being built.
+// A standalone marker after the native handoff must still work.
+function createWindowActivationArbiter() {
+  let nativePending = 0;
+  return {
+    async openNative(open) {
+      nativePending++;
+      try { return await open(); } finally { nativePending--; }
+    },
+    async showLegacy(show) {
+      if (nativePending) return false;
+      // Give an already queued native notification precedence.
+      await new Promise(resolve => setImmediate(resolve));
+      if (nativePending) return false;
+      await show();
+      return true;
+    },
+  };
 }
-module.exports = { forwardSecondInstance, claimDesktopInstance, shouldListenForLegacyWindowActivation };
+module.exports = { forwardSecondInstance, claimDesktopInstance, createWindowActivationArbiter };
