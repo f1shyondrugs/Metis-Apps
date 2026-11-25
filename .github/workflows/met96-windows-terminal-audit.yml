@@ -1,0 +1,51 @@
+name: MET-96 released Windows terminal audit
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.head_ref == 'test/met96-windows-terminal' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci --prefix desktop
+      - name: Exercise the actual released ASAR on a standard Windows token
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          METIS_TERMINAL_PROBE_RELEASE: v1.7.33
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $download = Join-Path $env:RUNNER_TEMP 'metis-terminal-release'
+          $install = Join-Path $env:RUNNER_TEMP 'metis-terminal-install'
+          gh release download v1.7.33 --repo f1shyondrugs/Metis-Apps --pattern 'Metis-AI-Remote-Client-Setup.exe' --dir $download
+          if ($LASTEXITCODE -ne 0) { throw 'Released installer download failed.' }
+          Remove-Item Env:GH_TOKEN
+          $installer = Join-Path $download 'Metis-AI-Remote-Client-Setup.exe'
+          $stream = [IO.File]::OpenRead($installer)
+          $sha256 = [Security.Cryptography.SHA256]::Create()
+          try { $digest = [BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+          finally { $stream.Dispose(); $sha256.Dispose() }
+          if ($digest -ne '022d34bdc0617758c23378a34749a5a8a5a45cdcf84defe99b48f253a5faaf17') { throw 'Installer digest does not match the public release.' }
+          Write-Output 'MET96_WINDOWS_V133_INSTALLER_DIGEST_OK'
+          $installation = Start-Process -FilePath $installer -ArgumentList "/S /currentuser /D=$install" -Wait -PassThru
+          if ($installation.ExitCode -ne 0) { throw 'Installer failed.' }
+          try {
+            node desktop/tests/windows-standard-run.cjs terminal-audit
+            if ($LASTEXITCODE -ne 0) { throw 'Released terminal audit failed.' }
+          } finally {
+            $entries = @(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq 'Metis' })
+            if ($entries.Count -eq 1 -and $entries[0].DisplayVersion -eq '1.7.33' -and $entries[0].UninstallString -match '^"([^"]+)"') {
+              $uninstall = [IO.Path]::GetFullPath($Matches[1])
+              if ([IO.Path]::GetDirectoryName($uninstall) -eq $install) {
+                Start-Process -FilePath $uninstall -ArgumentList '/S /currentuser' -Wait
+              }
+            }
+          }
