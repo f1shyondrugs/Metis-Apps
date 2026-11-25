@@ -9,7 +9,14 @@ $publishedAudit = $env:METIS_RELEASE_PAIRING_SMOKE -eq 'v1.7.31'
 if ($publishedAudit) {
   if ($expectedVersion -ne '1.7.31') { throw 'Published audit source version drifted.' }
   $installer = Get-Item (Join-Path $env:RUNNER_TEMP 'metis-v131-release\Metis-AI-Remote-Client-Setup.exe')
-  $digest = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+  $stream = [IO.File]::OpenRead($installer.FullName)
+  $sha256 = [Security.Cryptography.SHA256]::Create()
+  try {
+    $digest = [BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $stream.Dispose()
+    $sha256.Dispose()
+  }
   if ($digest -ne '6c9be7bd4103b16d2910963acaea836ad964fdeef9e13e930065f23c5d8e1a7f') { throw 'Published installer bytes do not match the approved Release asset.' }
   Write-Output 'MET77_RELEASED_INSTALLER_SHA256_OK'
 } else {

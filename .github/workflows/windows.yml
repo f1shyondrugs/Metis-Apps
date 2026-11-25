@@ -75,6 +75,7 @@ jobs:
           $audit = Join-Path $env:RUNNER_TEMP 'metis-v131-release'
           gh release download v1.7.31 --repo f1shyondrugs/Metis-Apps --pattern Metis-AI-Remote-Client-Setup.exe --dir $audit
           if ($LASTEXITCODE -ne 0) { throw 'Could not obtain the published fixture installer.' }
+          Remove-Item Env:GH_TOKEN
           cd desktop
           node tests/windows-standard-run.cjs installer
           if ($LASTEXITCODE -ne 0) { throw 'Installed first-pairing audit failed.' }
