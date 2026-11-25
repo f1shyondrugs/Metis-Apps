@@ -89,8 +89,13 @@ async function createDesktop(options = {}) {
       const entry=[...windows].find(w=>w.getState().server===normalized)||[...windows].find(w=>sameOrigin(w.getState().server,normalized))||await newWindow({serverUrl:normalized});
       active=entry;refreshMenus();return entry;
     },
-    async show() {
-      const current=focused()||await newWindow();
+    async show({preferVisible=false}={}) {
+      const selected=focused();
+      const visible=entry=>entry&&!entry.win.isDestroyed()&&entry.win.isVisible()&&!entry.win.isMinimized();
+      // A legacy show-only request may arrive after a native launch. The
+      // remembered selection can still be hidden; never reveal it alongside
+      // an already visible workspace merely to fulfill this wake request.
+      const current=(preferVisible&&!visible(selected)?[...windows].find(visible):selected)||selected||await newWindow();
       active=current;
       if(current.win.isMinimized())current.win.restore();current.win.show();current.win.focus();
       refreshMenus();return current;

@@ -216,8 +216,27 @@ async function main() {
   }
   console.log('REAL_SECOND_PROCESS_OPENS_NEW_WINDOW_AND_PRESERVES_CONNECTION_OK');
   const activation=require('../src/main/window-activation.cjs');
-  const testListener=process.platform==='win32'?null:activation.listenForWindowActivation({directory,activate:()=>api.showDesktop()});
+  const testListener=process.platform==='win32'?null:activation.listenForWindowActivation({directory,activate:()=>api.showDesktop({preferVisible:true})});
   try{
+    // The native launch has completed. Routing to an existing server can
+    // select the hidden original without showing it; simulate that stale selection.
+    const foreground=desktop.activeWindow;
+    const visible=()=>desktop.getWindows().filter(entry=>!entry.win.isDestroyed()&&entry.win.isVisible());
+    assert.deepEqual(visible(),[foreground]);
+    const original=await desktop.openServer(server);
+    assert.equal(original.getView().webContents,remote);
+    assert.equal(original.win.isVisible(),false);
+    const shown=[], originalShow=desktop.show;
+    desktop.show=async (...args)=>{const entry=await originalShow.apply(desktop,args);shown.push(entry);return entry;};
+    try{
+      fs.writeFileSync(path.join(directory,activation.REQUEST_FILE),'ignored untrusted contents');
+      await waitFor(()=>shown.length>0);
+      assert.equal(shown[0].win.id,foreground.win.id,'late show must select the visible workspace');
+      assert.equal(original.win.isVisible(),false,'late show must not reveal the hidden workspace');
+      assert.deepEqual(visible(),[foreground]);
+      await command('late-activation-signal');assert.equal(authentications,1);
+      console.log('LATE_LEGACY_SHOW_PRESERVES_ONE_VISIBLE_WORKSPACE_OK');
+    }finally{desktop.show=originalShow;}
     const closing=desktop.activeWindow;closing.win.close();await waitFor(()=>closing.win.isDestroyed()||!closing.win.isVisible());
     // This channel has only one effect: show the same window. Its contents are
     // deliberately not trusted as commands or navigation parameters.
