@@ -62,6 +62,8 @@ npm run build:mac -- --publish never
 npm run build:linux -- --publish never
 ```
 
+On Windows, an interactive device terminal uses the system pseudoconsole so the configured shell handles editing and Up/Down command history. This does not change pairing permissions or non-interactive commands.
+
 On Linux, a new device terminal uses Bash when the desktop session does not supply `SHELL` and Bash is installed. The terminal then supports Up/Down history. An explicitly configured shell and non-interactive command execution are unchanged.
 
 Linux Electron integration tests need a graphical session, e.g. `xvfb-run -a npm run test:e2e` on CI. Packaged Linux launch preflight refuses root/headless startup and reports missing libraries. Linux Computer Use needs X11, xdotool, wmctrl and ImageMagick.

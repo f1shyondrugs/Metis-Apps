@@ -9,3 +9,13 @@ for(const file of files){
 }
 assert.equal(JSON.parse(asar.extractFile(archive,'package.json')).version,require('../package.json').version);
 console.log(`INSTALLED_SPLIT_ADMIN_ASAR_${files.length}_SOURCE_HASHES_AND_VERSION_OK`);
+if(process.platform==='win32'){
+ const packageRoot=path.join(archive+'.unpacked','node_modules','node-pty');
+ assert.equal(require(path.join(packageRoot,'package.json')).version,'1.1.0');
+ assert.equal(typeof require(packageRoot).spawn,'function');
+ const binary=['build/Release','prebuilds/win32-'+process.arch].map(dir=>path.join(packageRoot,dir,'conpty.node')).find(file=>fs.existsSync(file));
+ assert.ok(binary,'Installed pseudoconsole binding must be available outside ASAR');
+ assert.equal(typeof require(binary).startProcess,'function');
+ assert.deepEqual(normalize(asar.extractFile(archive,'client.mjs')),normalize(fs.readFileSync(path.join(__dirname,'../src/device/client.mjs'))));
+ console.log('MET96_WINDOWS_INSTALLED_CONPTY_AND_CLIENT_ASAR_OK');
+}

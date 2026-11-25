@@ -2,7 +2,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
@@ -235,26 +236,47 @@ export function startRemoteClient({ config: suppliedConfig, configPath, onEvent 
       return { path: file, deleted: true };
     }
     if (action === "pty_open") {
-      const child = spawn(terminalShell(), process.platform === "win32" ? [] : ["-i"], {
-        cwd: typeof params.cwd === "string" ? params.cwd : os.homedir(),
-        env: process.platform === "linux" && !process.env.TERM ? { ...process.env, TERM: "xterm-256color" } : process.env,
-        stdio: "pipe",
-        windowsHide: true,
-      });
+      const cwd = typeof params.cwd === "string" ? params.cwd : os.homedir();
       const sessionId = randomUUID();
-      running.set(sessionId, child);
-      child.stdout.on("data", (data) => send({ type: "event", sessionId, event: "stdout", data: data.toString() }));
-      child.stderr.on("data", (data) => send({ type: "event", sessionId, event: "stderr", data: data.toString() }));
-      child.on("exit", (code) => {
+      const complete = (code) => {
         running.delete(sessionId);
         send({ type: "event", sessionId, event: "exit", code });
-      });
+      };
+      if (process.platform === "win32") {
+        // Keep cmd.exe and the existing pairing identity, but attach a console
+        // so the shell handles editing/history instead of reading arrow bytes.
+        // Native helper workers must be loaded from a physical installed path.
+        const entry = createRequire(import.meta.url).resolve("node-pty");
+        const { default: pty } = await import(unpackedHref(pathToFileURL(entry)));
+        if (stopped) throw new Error("The device connection was closed.");
+        const terminal = pty.spawn(shell, [], { cwd, env: process.env, name: "xterm-256color", cols: 80, rows: 24, useConpty: true });
+        running.set(sessionId, { write: data => terminal.write(data), kill: () => terminal.kill() });
+        terminal.onData(data => send({ type: "event", sessionId, event: "stdout", data }));
+        terminal.onExit(({ exitCode }) => complete(exitCode));
+      } else {
+        const child = spawn(terminalShell(), ["-i"], {
+          cwd,
+          env: process.platform === "linux" && !process.env.TERM ? { ...process.env, TERM: "xterm-256color" } : process.env,
+          stdio: "pipe",
+          windowsHide: true,
+        });
+        running.set(sessionId, {
+          write: data => {
+            if (!child.stdin.writable) throw new Error("PTY session not found");
+            child.stdin.write(data);
+          },
+          kill: () => child.kill(),
+        });
+        child.stdout.on("data", data => send({ type: "event", sessionId, event: "stdout", data: data.toString() }));
+        child.stderr.on("data", data => send({ type: "event", sessionId, event: "stderr", data: data.toString() }));
+        child.on("exit", complete);
+      }
       return { sessionId };
     }
     if (action === "pty_input") {
-      const child = running.get(String(params.sessionId));
-      if (!child?.stdin.writable) throw new Error("PTY session not found");
-      child.stdin.write(String(params.data || ""));
+      const terminal = running.get(String(params.sessionId));
+      if (!terminal) throw new Error("PTY session not found");
+      terminal.write(String(params.data || ""));
       return { ok: true };
     }
     if (action === "pty_close") {

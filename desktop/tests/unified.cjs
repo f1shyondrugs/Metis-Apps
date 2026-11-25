@@ -39,6 +39,7 @@ async function main() {
   const wss = new WebSocketServer({ server: fixture });
   let socket, authentications = 0, overlayCapability=false;
   const responses = new Map();
+  const terminalOutput = new Map(), closedTerminals = new Set();
   wss.on('connection', ws => {
     socket = ws;
     ws.on('message', raw => {
@@ -51,6 +52,10 @@ async function main() {
       }
       if (message.type === 'heartbeat') { overlayCapability=message.overlayAnnotations===true;ws.send(JSON.stringify({ type: 'heartbeat_ack' })); }
       if (message.type === 'response') responses.set(message.requestId, message);
+      if (message.type === 'event' && message.event === 'stdout') {
+        terminalOutput.set(message.sessionId,(terminalOutput.get(message.sessionId)||'')+message.data);
+      }
+      if (message.type === 'event' && message.event === 'exit') closedTerminals.add(message.sessionId);
     });
   });
   const configFile = path.join(directory, 'config.json');
@@ -90,6 +95,35 @@ async function main() {
   if(process.platform==='win32'){assert.equal(api.publicState().deviceElevation,permissionMode==='admin'?'administrator':'user');console.log('ACTUAL_DEVICE_PROCESS_TOKEN_MATCHES_PAIRING_OK');}
   console.log('SEPARATE_DEVICE_PROCESS_OK');
   console.log('PAIRING_IDENTITY_PRESERVED_OK');
+  if (process.platform === 'win32' && permissionMode === 'user') {
+    // Exercise the real standard-token device UtilityProcess, not cmd.exe run
+    // from the test runner. Use the same input bytes xterm forwards.
+    let serial=0;
+    const request=async(action,params)=>{
+      const requestId='windows-history-'+(++serial);
+      socket.send(JSON.stringify({type:'request',requestId,action,params}));
+      await waitFor(()=>responses.has(requestId));
+      const response=responses.get(requestId);
+      assert.equal(response.ok,true,JSON.stringify(response));
+      return response.result;
+    };
+    const {sessionId}=await request('pty_open',{cwd:directory});
+    const input=data=>request('pty_input',{sessionId,data});
+    const count=id=>(terminalOutput.get(sessionId)||'').match(new RegExp('MET96_TERM_'+id+'(?=[\\r\\n\\x1b])|MET96_TERM_'+id+'$','g'))?.length||0;
+    try {
+      for (const id of ['ALPHA','BRAVO']){
+        // Caret is present in terminal echo but not the command's output.
+        await input('echo MET96_TE^RM_'+id+'\r');
+        await waitFor(()=>count(id)===1);
+      }
+      for(const key of ['\x1b[A','\x1b[A','\x1b[B','\r'])await input(key);
+      await waitFor(()=>count('BRAVO')===2);
+      assert.equal(count('ALPHA'),1);
+      await input('exit\r');
+      await waitFor(()=>closedTerminals.has(sessionId));
+      console.log('MET96_WINDOWS_CONPTY_NATIVE_HISTORY_AND_EXIT_OK');
+    } finally { await request('pty_close',{sessionId}); }
+  }
   const desktop = api.getDesktop();
   assert.equal(earlyClosed,true,'fixture must really close the first workspace during startup');
   assert.equal(desktop.win.isVisible(),false,'startup must not show a workspace that the user already closed');
