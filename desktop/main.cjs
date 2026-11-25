@@ -786,7 +786,8 @@ function setupUpdates() {
   updateInterval=setInterval(check,6*60*60*1000);
 }
 
-const ownsDesktopInstance=require("./src/main/reopen.cjs").claimDesktopInstance({
+const { claimDesktopInstance, shouldListenForLegacyWindowActivation } = require("./src/main/reopen.cjs");
+const ownsDesktopInstance=claimDesktopInstance({
  app,platform:process.platform,
  readElevation:()=>{
   const {execFileSync}=require("node:child_process");
@@ -835,7 +836,7 @@ if(process.platform==="win32"){
   app.on("activate", () => { if (installingUpdate || updateWindow.active) void updateWindow.show(); else void showDesktop(); });
   let markDesktopReady;
   const desktopReady = new Promise(resolve => { markDesktopReady = resolve; });
-  const activationListener = process.platform === "win32"
+  const activationListener = shouldListenForLegacyWindowActivation(process.platform, getWindowsElevation())
     ? require("./src/main/window-activation.cjs").listenForWindowActivation({
       directory: userDataDir,
       activate: () => installingUpdate || updateWindow.active ? updateWindow.show() : desktopReady.then(() => showDesktop()),

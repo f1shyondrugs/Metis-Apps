@@ -85,7 +85,11 @@ if($reopenedHandle -eq 0 -or $process.HasExited){
 # Explicit app starts now open a new workspace; the previous last window stays
 # hidden. Source integration verifies independent windows and shared sessions.
 # Here enforce one visible workspace, a short-lived launcher and the same owner PID.
-if([MetisOwnWindows]::Count([int]$process.Id) -ne 1){throw 'Reopening created more than one visible workspace.'}
+$workspaceCount = [MetisOwnWindows]::Count([int]$process.Id)
+if ($workspaceCount -ne 1) {
+  [MetisOwnWindows]::Describe([int]$process.Id) | Write-Output
+  throw "Expected exactly one visible workspace after reopening; found $workspaceCount."
+}
 if(!$second.WaitForExit(15000)){
  Get-Content (Join-Path $env:RUNNER_TEMP 'metis-second.stderr.log') -Tail 50 -ErrorAction SilentlyContinue | Write-Output
  throw 'Second launcher did not exit.'

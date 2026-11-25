@@ -24,4 +24,11 @@ function claimDesktopInstance({app,platform,readElevation,requestActivation,onEr
   finally{app.exit(0);}
   return false;
 }
-module.exports = { forwardSecondInstance, claimDesktopInstance };
+// Medium-to-Medium launch already delivers Electron's second-instance event.
+// Also acting on the legacy marker can show the old window while the native
+// handler is opening a new one. The secondary still sends the marker for
+// older elevated primaries.
+function shouldListenForLegacyWindowActivation(platform, elevation) {
+  return platform === 'win32' && elevation !== 'user';
+}
+module.exports = { forwardSecondInstance, claimDesktopInstance, shouldListenForLegacyWindowActivation };

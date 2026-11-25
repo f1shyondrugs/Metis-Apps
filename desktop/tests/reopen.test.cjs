@@ -1,6 +1,13 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
-const {forwardSecondInstance,claimDesktopInstance}=require('../src/main/reopen.cjs');
+const {forwardSecondInstance,claimDesktopInstance,shouldListenForLegacyWindowActivation}=require('../src/main/reopen.cjs');
+test('a Medium Windows primary uses native second-instance events, not the legacy marker', ()=>{
+ assert.equal(shouldListenForLegacyWindowActivation('win32','user'),false);
+ assert.equal(shouldListenForLegacyWindowActivation('win32','administrator'),true);
+ assert.equal(shouldListenForLegacyWindowActivation('win32','unknown'),true);
+ assert.equal(shouldListenForLegacyWindowActivation('darwin',null),false);
+ assert.equal(shouldListenForLegacyWindowActivation('linux',null),false);
+});
 test('a primary claims its lock synchronously without a token probe or readiness',()=>{
  const calls=[];assert.equal(claimDesktopInstance({app:{requestSingleInstanceLock:()=>{calls.push('lock');return true;},whenReady:()=>assert.fail(),exit:()=>assert.fail()},platform:'win32',readElevation:()=>assert.fail(),requestActivation:()=>assert.fail()}),true);assert.deepEqual(calls,['lock']);
 });
