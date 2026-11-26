@@ -2,10 +2,39 @@ import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 const { default: afterPack } = await import(new URL("../desktop/build/linux-after-pack.cjs", import.meta.url));
+
+test("desktop syntax check covers packaging hooks but skips generated output", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "metis-packaging-check-"));
+  try {
+    for (const name of ["build", "dist"]) await mkdir(path.join(directory, name));
+    const source = path.join(directory, "build", "linux-after-pack.cjs");
+    await writeFile(source, "module.exports = () => {};");
+    await writeFile(path.join(directory, "dist", "generated.cjs"), "const = invalid;");
+    const check = fileURLToPath(new URL("../desktop/scripts/check.cjs", import.meta.url));
+    const runCheck = () => spawnSync(process.execPath, [check], {
+      cwd: directory, encoding: "utf8", timeout: 10_000,
+    });
+    const valid = runCheck();
+    assert.ifError(valid.error);
+    assert.equal(valid.status, 0, valid.stderr);
+    assert.match(valid.stdout, /CHECK_OK/);
+
+    await writeFile(source, "const = invalid;");
+    const invalid = runCheck();
+    assert.ifError(invalid.error);
+    assert.equal(invalid.status, 1, "a malformed tracked packaging hook must fail the syntax check");
+    assert.match(invalid.stderr, /linux-after-pack\.cjs/);
+    assert.match(invalid.stderr, /SyntaxError/);
+    assert.doesNotMatch(invalid.stdout, /CHECK_OK/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 function run(file, env) {
   return new Promise((resolve) => {

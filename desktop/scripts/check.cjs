@@ -3,7 +3,8 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 function check(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    if (['node_modules', 'dist', 'test-results', 'assets', 'build'].includes(entry.name)) continue;
+    // build/ contains installer source (including the afterPack hook); dist/ is generated.
+    if (['node_modules', 'dist', 'test-results', 'assets'].includes(entry.name)) continue;
     const file = path.join(directory, entry.name);
     if (entry.isDirectory()) check(file);
     else if (/\.(cjs|mjs|js)$/.test(file)) {
